@@ -1,0 +1,22 @@
+/* Lodge. Paper room. Wood is the one action and later the "still to do" stage word.
+   Moss is the offer word. Pencil is waiting or a rejection. Red is errors only.
+   shortcut: light paper only, add a night palette if a dark theme is requested. */
+:root {
+  --paper: #f5f0e1;
+  --ink: #1a1a1a;
+  --pencil: #4a4a4a;
+  --wood: #9a3412;
+  --wood-pressed: #92400e;
+  --card: #fdfbf7;
+  --line: #d4c4a8;
+  --error: #b91c1c;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+}
