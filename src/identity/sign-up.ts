@@ -1,6 +1,6 @@
-import { randomBytes, scrypt } from "node:crypto";
 import { query } from "./db.ts";
 import { IdentityError } from "./errors.ts";
+import { hashPassword } from "./hash.ts";
 import type { CurrentUser, LoginProvider } from "./types.ts";
 
 function normalizeEmail(email: string): string {
@@ -14,16 +14,6 @@ function assertPassword(password: string): void {
       "Password must be at least 10 characters",
     );
   }
-}
-
-function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString("hex");
-  return new Promise((resolve, reject) => {
-    scrypt(password, salt, 32, (error, key) => {
-      if (error) reject(error);
-      else resolve(`scrypt$${salt}$${key.toString("hex")}`);
-    });
-  });
 }
 
 type AccountRow = {

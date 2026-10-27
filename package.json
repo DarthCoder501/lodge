@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "test": "node --import ./tests/register.mjs --test 'tests/**/*.test.ts'",
+    "test": "node --import ./tests/register.mjs --test --test-concurrency=1 'tests/**/*.test.ts'",
     "test:e2e": "playwright test"
   },
   "dependencies": {
