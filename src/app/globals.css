@@ -1,22 +1,39 @@
-/* Lodge. Paper room. Wood is the one action and later the "still to do" stage word.
-   Moss is the offer word. Pencil is waiting or a rejection. Red is errors only.
-   shortcut: light paper only, add a night palette if a dark theme is requested. */
+/* Lodge tokens. Old names stay until later tasks restyle each screen. */
 :root {
-  --paper: #f5f0e1;
-  --ink: #1a1a1a;
-  --pencil: #4a4a4a;
-  --wood: #9a3412;
-  --wood-pressed: #92400e;
-  --card: #fdfbf7;
-  --line: #d4c4a8;
-  --error: #b91c1c;
+  --parchment: #f4efe6;
+  --travertine: #e4d5c2;
+  --stone: #d5c4ae;
+  --well: #d4c2a8;
+  --well-focus: #e7d3b8;
+  --well-error: #f0d5cb;
+  --timber: #2c241c;
+  --espresso: #2a211c;
+  --mute: #5c4a3e;
+  --disabled: #56483e;
+  --hearth: #7a3822;
+  --on-hearth: #f8f3ea;
+  --on-timber: #f4efe6;
+  --on-timber-mute: #d5c6b4;
+  --pine: #1e4634;
+  --pine-surface: #e4e6d6;
+  --error-ink: #7a2e22;
+
+  --paper: var(--parchment);
+  --ink: var(--timber);
+  --pencil: var(--mute);
+  --wood: var(--hearth);
+  --wood-pressed: var(--hearth);
+  --card: var(--well);
+  --line: var(--stone);
+  --error: var(--error-ink);
 }
 
 body {
   margin: 0;
-  background: var(--paper);
-  color: var(--ink);
+  background: var(--parchment);
+  color: var(--timber);
   font-family: var(--font-body), sans-serif;
   font-size: 1rem;
   line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }

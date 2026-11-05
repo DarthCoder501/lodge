@@ -56,6 +56,7 @@ test.describe("sign-in", () => {
       await Promise.all([
         page
           .locator("form")
+          .filter({ has: page.getByLabel("Email") })
           .evaluate((element) => getComputedStyle(element).backgroundColor),
         page
           .locator("main")

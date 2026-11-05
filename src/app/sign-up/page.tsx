@@ -10,7 +10,8 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const fieldKey = state.id ?? "draft";
   const emailError =
-    state.error && (state.error.code === "EMAIL_TAKEN" || (state.email ?? "").trim() === "")
+    state.error &&
+    (state.error.code === "EMAIL_TAKEN" || (state.email ?? "").trim() === "")
       ? state.error
       : undefined;
   const passwordError = state.error && !emailError ? state.error : undefined;
@@ -50,7 +51,9 @@ export default function SignUpPage() {
               defaultValue={state.password ?? ""}
               required
               aria-invalid={passwordError ? true : undefined}
-              aria-describedby={passwordError ? "password-error" : "password-hint"}
+              aria-describedby={
+                passwordError ? "password-error" : "password-hint"
+              }
             />
             <button
               type="button"
@@ -88,7 +91,7 @@ export default function SignUpPage() {
         }
         .sign-up *, .sign-up *::before, .sign-up *::after { box-sizing: border-box; }
         h1 {
-          font-family: var(--font-display), serif;
+          font-family: var(--font-body), sans-serif;
           font-size: 1.75rem;
           font-weight: 500;
           margin: 0 0 1rem;

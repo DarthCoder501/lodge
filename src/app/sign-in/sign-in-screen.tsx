@@ -112,7 +112,7 @@ export function SignInScreen({
         }
         .sign-in *, .sign-in *::before, .sign-in *::after { box-sizing: border-box; }
         h1 {
-          font-family: var(--font-display), serif;
+          font-family: var(--font-body), sans-serif;
           font-size: 1.75rem;
           font-weight: 500;
           margin: 0 0 1rem;

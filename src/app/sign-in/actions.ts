@@ -40,10 +40,15 @@ export async function signIn(
   redirect("/sign-in");
 }
 
-export async function signOutAction(
-  _previous: void | undefined,
-  _formData: FormData,
-): Promise<void> {
+async function endSession(): Promise<void> {
   await signOut();
   redirect("/sign-in");
+}
+
+export async function signOutAction(): Promise<void> {
+  await endSession();
+}
+
+export async function signOutForm(_formData: FormData): Promise<void> {
+  await endSession();
 }
