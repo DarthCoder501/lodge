@@ -22,9 +22,11 @@ async function removeFixtures(): Promise<void> {
 
 before(async () => {
   const dir = join("supabase", "migrations");
-  const name = readdirSync(dir).find((file) => file.endsWith("_accounts.sql"));
-  assert.ok(name, "accounts migration");
-  await exec(readFileSync(join(dir, name), "utf8"));
+  const names = readdirSync(dir).filter((file) => file.endsWith(".sql")).sort();
+  assert.ok(names.some((file) => file.endsWith("_accounts.sql")), "accounts migration");
+  for (const name of names) {
+    await exec(readFileSync(join(dir, name), "utf8"));
+  }
   await removeFixtures();
 });
 

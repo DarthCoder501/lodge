@@ -2,6 +2,7 @@ import { query } from "./db.ts";
 import { IdentityError } from "./errors.ts";
 import { hashPassword } from "./hash.ts";
 import type { CurrentUser, LoginProvider } from "./types.ts";
+import { sendVerificationLink } from "./verify-email.ts";
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -48,6 +49,7 @@ export async function signUpWithPassword(input: {
   assertPassword(input.password);
 
   const passwordHash = await hashPassword(input.password);
+  let user: CurrentUser;
   try {
     const rows = await query<AccountRow>(
       `insert into identity.accounts (email, password_hash)
@@ -56,7 +58,7 @@ export async function signUpWithPassword(input: {
       [email, passwordHash],
     );
     const row = rows[0];
-    return {
+    user = {
       id: row.id,
       email: row.email,
       emailVerified: row.email_verified,
@@ -68,4 +70,11 @@ export async function signUpWithPassword(input: {
     }
     throw error;
   }
+  try {
+    await sendVerificationLink(user);
+  } catch (error) {
+    await query("delete from identity.accounts where id = $1::bigint", [user.id]);
+    throw error;
+  }
+  return user;
 }
