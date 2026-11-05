@@ -8,20 +8,30 @@ async function box(locator: Locator) {
 
 async function noHorizontalScroll(page: Page) {
   const overflows = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    () =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth + 1,
   );
   expect(overflows).toBe(false);
 }
 
 test.describe("sign-in", () => {
-  test("shows one primary action and keeps the fields together", async ({ page }) => {
+  test("shows one primary action and keeps the fields together", async ({
+    page,
+  }) => {
     await page.goto("/sign-in");
 
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Sign in" })).toHaveCount(1);
     await expect(page.getByRole("textbox")).toHaveCount(2);
-    await expect(page.getByLabel("Email")).toHaveAttribute("autocomplete", "email");
-    await expect(page.getByLabel("Password")).toHaveAttribute("autocomplete", "current-password");
+    await expect(page.getByLabel("Email")).toHaveAttribute(
+      "autocomplete",
+      "email",
+    );
+    await expect(page.getByLabel("Password")).toHaveAttribute(
+      "autocomplete",
+      "current-password",
+    );
 
     const submit = await box(page.getByRole("button", { name: "Sign in" }));
     const show = await box(page.getByRole("button", { name: "Show password" }));
@@ -42,22 +52,48 @@ test.describe("sign-in", () => {
     expect(labelGap).toBeGreaterThanOrEqual(0);
     expect(labelGap).toBeLessThan(fieldGap);
 
-    const [formBackground, pageBackground, submitBackground, showBackground] = await Promise.all([
-      page.locator("form").evaluate((element) => getComputedStyle(element).backgroundColor),
-      page.locator("main").evaluate((element) => getComputedStyle(element).backgroundColor),
-      page
-        .getByRole("button", { name: "Sign in" })
-        .evaluate((element) => getComputedStyle(element).backgroundColor),
-      page
-        .getByRole("button", { name: "Show password" })
-        .evaluate((element) => getComputedStyle(element).backgroundColor),
-    ]);
+    const [formBackground, pageBackground, submitBackground, showBackground] =
+      await Promise.all([
+        page
+          .locator("form")
+          .evaluate((element) => getComputedStyle(element).backgroundColor),
+        page
+          .locator("main")
+          .evaluate((element) => getComputedStyle(element).backgroundColor),
+        page
+          .getByRole("button", { name: "Sign in" })
+          .evaluate((element) => getComputedStyle(element).backgroundColor),
+        page
+          .getByRole("button", { name: "Show password" })
+          .evaluate((element) => getComputedStyle(element).backgroundColor),
+      ]);
     expect(formBackground).not.toBe(pageBackground);
     expect(submitBackground).not.toBe(showBackground);
+
+    const link = page.getByRole("checkbox", {
+      name: "Link this Google account so its mail can be synced",
+    });
+    await expect(link).not.toBeChecked();
+    const google = page.getByRole("button", { name: "Continue with Google" });
+    const linkBox = await box(link);
+    const googleBox = await box(google);
+    expect(Math.min(linkBox.width, linkBox.height)).toBeGreaterThanOrEqual(24);
+    expect(Math.min(googleBox.width, googleBox.height)).toBeGreaterThanOrEqual(
+      44,
+    );
+    expect(googleBox.y - (linkBox.y + linkBox.height)).toBeGreaterThanOrEqual(
+      8,
+    );
+    const googleBackground = await google.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    expect(googleBackground).not.toBe(submitBackground);
     await noHorizontalScroll(page);
   });
 
-  test("shows a pending state while sign-in is still running", async ({ page }) => {
+  test("shows a pending state while sign-in is still running", async ({
+    page,
+  }) => {
     await page.goto("/sign-in");
     await page.getByLabel("Email").fill("pending@example.com");
     await page.getByLabel("Password").fill("long-enough-1");
@@ -69,7 +105,11 @@ test.describe("sign-in", () => {
         if (button.textContent?.includes("Signing in")) {
           sessionStorage.setItem("sawPending", "yes");
         }
-      }).observe(button, { childList: true, characterData: true, subtree: true });
+      }).observe(button, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
     });
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect
@@ -77,7 +117,9 @@ test.describe("sign-in", () => {
       .toBe("yes");
   });
 
-  test("keeps typed values, starts a session, then signs out", async ({ page }) => {
+  test("keeps typed values, starts a session, then signs out", async ({
+    page,
+  }) => {
     const email = `Person.${Date.now()}@Example.com`;
     await page.goto("/sign-up");
     await page.getByLabel("Email").fill(email);
@@ -94,22 +136,32 @@ test.describe("sign-in", () => {
     );
     await expect(page.getByLabel("Email")).toHaveValue(email);
     await expect(page.getByLabel("Password")).toHaveValue("wrong-password");
-    expect((await page.context().cookies()).map((cookie) => cookie.name)).not.toContain("session");
+    expect(
+      (await page.context().cookies()).map((cookie) => cookie.name),
+    ).not.toContain("session");
 
     await page.getByLabel("Password").fill("long-enough-1");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("status")).toHaveText(`Signed in as ${email.toLowerCase()}.`);
-    await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
+    await expect(page.getByRole("status")).toHaveText(
+      `Signed in as ${email.toLowerCase()}.`,
+    );
+    await expect(
+      page.getByRole("heading", { name: "Signed in" }),
+    ).toBeVisible();
     await expect(page.locator("main").getByRole("button")).toHaveCount(1);
     const signOut = await box(page.getByRole("button", { name: "Sign out" }));
     expect(Math.min(signOut.width, signOut.height)).toBeGreaterThanOrEqual(44);
-    const session = (await page.context().cookies()).find((cookie) => cookie.name === "session");
+    const session = (await page.context().cookies()).find(
+      (cookie) => cookie.name === "session",
+    );
     expect(session?.httpOnly).toBe(true);
 
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
     await expect(page.getByRole("status")).toHaveCount(0);
-    expect((await page.context().cookies()).map((cookie) => cookie.name)).not.toContain("session");
+    expect(
+      (await page.context().cookies()).map((cookie) => cookie.name),
+    ).not.toContain("session");
   });
 
   test("fits a phone width", async ({ page }) => {

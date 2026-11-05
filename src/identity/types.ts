@@ -7,6 +7,10 @@ export interface CurrentUser {
   loginProvider: LoginProvider;
 }
 
+export interface ProviderSignInResult extends CurrentUser {
+  linkAsMailbox: boolean;
+}
+
 export interface APIError {
   error: {
     code:

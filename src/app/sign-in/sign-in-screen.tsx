@@ -5,7 +5,7 @@ import { signIn, signOutAction, type SignInFormState } from "./actions.ts";
 
 const initialState: SignInFormState = {};
 
-function SignInForm() {
+function SignInForm({ notice }: { notice?: string }) {
   const [state, action, pending] = useActionState(signIn, initialState);
   const [showPassword, setShowPassword] = useState(false);
   const fieldKey = state.id ?? "draft";
@@ -43,7 +43,10 @@ function SignInForm() {
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? "sign-in-error" : undefined}
             />
-            <button type="button" onClick={() => setShowPassword((current) => !current)}>
+            <button
+              type="button"
+              onClick={() => setShowPassword((current) => !current)}
+            >
               {showPassword ? "Hide password" : "Show password"}
             </button>
           </div>
@@ -56,6 +59,14 @@ function SignInForm() {
         <button type="submit" disabled={pending}>
           {pending ? "Signing in" : "Sign in"}
         </button>
+      </form>
+      <form className="google" action="/sign-in/google" method="get">
+        {notice ? <p role="alert">{notice}</p> : null}
+        <label className="check">
+          <input type="checkbox" name="linkAsMailbox" value="true" />
+          Link this Google account so its mail can be synced
+        </label>
+        <button type="submit">Continue with Google</button>
       </form>
     </>
   );
@@ -77,10 +88,16 @@ function SignedIn({ email }: { email: string }) {
   );
 }
 
-export function SignInScreen({ email }: { email?: string }) {
+export function SignInScreen({
+  email,
+  notice,
+}: {
+  email?: string;
+  notice?: string;
+}) {
   return (
     <main className="sign-in">
-      {email ? <SignedIn email={email} /> : <SignInForm />}
+      {email ? <SignedIn email={email} /> : <SignInForm notice={notice} />}
       <style>{`
         .sign-in {
           box-sizing: border-box;
@@ -144,6 +161,28 @@ export function SignInScreen({ email }: { email?: string }) {
           button { transition: background-color 150ms ease; }
         }
         button[type="submit"]:hover { background: var(--wood-pressed); }
+        form + form { margin-top: 0.75rem; }
+        .check {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.5rem;
+          min-height: 44px;
+          font-weight: 600;
+        }
+        .check input {
+          width: 1.5rem;
+          height: 1.5rem;
+          min-height: 1.5rem;
+          margin-top: 0.15rem;
+          padding: 0;
+          flex: 0 0 auto;
+        }
+        form.google button[type="submit"] {
+          background: var(--card);
+          color: var(--ink);
+          border: 1px solid var(--line);
+        }
+        form.google button[type="submit"]:hover { background: var(--paper); }
         button:focus-visible, input:focus-visible {
           outline: 2px solid var(--wood);
           outline-offset: 2px;
