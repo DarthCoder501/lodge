@@ -8,24 +8,77 @@ async function box(locator: Locator) {
 
 async function noHorizontalScroll(page: Page) {
   const overflows = await page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    () =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth + 1,
   );
   expect(overflows).toBe(false);
 }
 
 test.describe("sign-up", () => {
-  test("shows one primary action and keeps the fields together", async ({ page }) => {
+  test("shows one primary action and keeps the fields together", async ({
+    page,
+  }) => {
     await page.goto("/sign-up");
 
-    await expect(page.getByRole("heading", { name: "Create account" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Create account" })).toHaveCount(1);
+    await expect(
+      page.getByRole("heading", { name: "Create account" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Create account" }),
+    ).toHaveCount(1);
     await expect(page.getByRole("textbox")).toHaveCount(2);
-    await expect(page.getByLabel("Email")).toHaveAttribute("autocomplete", "email");
-    await expect(page.getByLabel("Password")).toHaveAttribute("autocomplete", "new-password");
+    await expect(page.getByLabel("Email")).toHaveAttribute(
+      "autocomplete",
+      "email",
+    );
+    await expect(
+      page.getByRole("textbox", { name: "Password" }),
+    ).toHaveAttribute("autocomplete", "new-password");
+    await expect(
+      page.getByRole("link", { name: "Sign in instead" }),
+    ).toBeVisible();
+    await expect(page.getByText("10 characters")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Show password" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("checkbox", { name: "Read Gmail for applications" }),
+    ).not.toBeChecked();
+    await expect(
+      page.getByRole("checkbox", { name: "Read Outlook for applications" }),
+    ).not.toBeChecked();
+    await expect(page.locator("form.provider").first()).toHaveAttribute(
+      "action",
+      "/sign-in/google",
+    );
+    await expect(page.locator("form.provider").nth(1)).toHaveAttribute(
+      "action",
+      "/sign-in/microsoft",
+    );
 
-    const submit = await box(page.getByRole("button", { name: "Create account" }));
+    const emailWell = page.locator(".well").first();
+    const wellBox = await box(emailWell);
+    expect(wellBox.height).toBe(64);
+    await expect(page.getByLabel("Email")).toHaveCSS("font-size", "20px");
+
+    await page.getByRole("textbox", { name: "Password" }).focus();
+    const passwordWell = page.locator(".well").nth(1);
+    await expect(passwordWell).toHaveCSS(
+      "background-color",
+      "rgb(231, 211, 184)",
+    );
+    await expect(passwordWell.locator(".inlay")).toHaveCSS(
+      "background-color",
+      "rgb(122, 56, 34)",
+    );
+
+    await page.getByRole("textbox", { name: "Password" }).fill("a");
+    const submit = await box(
+      page.getByRole("button", { name: "Create account" }),
+    );
     const show = await box(page.getByRole("button", { name: "Show password" }));
-    const password = await box(page.getByLabel("Password"));
+    const password = await box(page.getByRole("textbox", { name: "Password" }));
     expect(Math.min(submit.width, submit.height)).toBeGreaterThanOrEqual(44);
     expect(Math.min(show.width, show.height)).toBeGreaterThanOrEqual(24);
     const sideBySide = show.y < password.y + password.height;
@@ -42,34 +95,95 @@ test.describe("sign-up", () => {
     expect(labelGap).toBeGreaterThanOrEqual(0);
     expect(labelGap).toBeLessThan(fieldGap);
 
-    const [formBackground, pageBackground, submitBackground, showBackground] = await Promise.all([
-      page.locator("form").evaluate((element) => getComputedStyle(element).backgroundColor),
-      page.locator("main").evaluate((element) => getComputedStyle(element).backgroundColor),
+    const [
+      wellBackground,
+      deskBackground,
+      submitBackground,
+      providerBackground,
+      linkColor,
+      promptColor,
+    ] = await Promise.all([
+      emailWell.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      ),
+      page
+        .locator("main")
+        .evaluate((element) => getComputedStyle(element).backgroundColor),
       page
         .getByRole("button", { name: "Create account" })
         .evaluate((element) => getComputedStyle(element).backgroundColor),
       page
-        .getByRole("button", { name: "Show password" })
+        .getByRole("button", { name: "Continue with Microsoft" })
         .evaluate((element) => getComputedStyle(element).backgroundColor),
+      page
+        .getByRole("link", { name: "Sign in instead" })
+        .evaluate((element) => getComputedStyle(element).color),
+      page
+        .locator(".alternate span")
+        .evaluate((element) => getComputedStyle(element).color),
     ]);
-    expect(formBackground).not.toBe(pageBackground);
-    expect(submitBackground).not.toBe(showBackground);
+    expect(wellBackground).not.toBe(deskBackground);
+    expect(submitBackground).not.toBe(providerBackground);
+    expect(linkColor).not.toBe(promptColor);
     await noHorizontalScroll(page);
+
+    await page.getByRole("button", { name: "Show password" }).click();
+    await expect(
+      page.getByRole("textbox", { name: "Password" }),
+    ).toHaveAttribute("type", "text");
+    await page.getByRole("button", { name: "Hide password" }).click();
+    await expect(
+      page.getByRole("textbox", { name: "Password" }),
+    ).toHaveAttribute("type", "password");
+
+    await page
+      .getByRole("checkbox", { name: "Read Outlook for applications" })
+      .check();
+    await expect(
+      page.getByRole("checkbox", { name: "Read Outlook for applications" }),
+    ).toBeChecked();
   });
 
-  test("shows a pending state while sign-up is still running", async ({ page }) => {
+  test("does not submit when the password reaches 10 characters", async ({
+    page,
+  }) => {
+    let posted = false;
+    page.on("request", (request) => {
+      if (request.method() === "POST") posted = true;
+    });
+    await page.goto("/sign-up");
+    await page.getByLabel("Email").fill("ten@example.com");
+    await page.getByRole("textbox", { name: "Password" }).fill("0123456789");
+    await page.waitForTimeout(500);
+    expect(posted).toBe(false);
+    await expect(
+      page.getByRole("button", { name: "Creating account" }),
+    ).toHaveCount(0);
+    await expect(page.getByRole("status")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/sign-up$/);
+  });
+
+  test("shows a pending state while sign-up is still running", async ({
+    page,
+  }) => {
     await page.goto("/sign-up");
     await page.getByLabel("Email").fill("pending@example.com");
-    await page.getByLabel("Password").fill("long-enough-1");
+    await page.getByRole("textbox", { name: "Password" }).fill("long-enough-1");
     await page.evaluate(() => {
       sessionStorage.removeItem("sawPending");
-      const button = document.querySelector("button[type='submit']");
+      const button = document.querySelector(
+        "form.account button[type='submit']",
+      );
       if (!button) return;
       new MutationObserver(() => {
         if (button.textContent?.includes("Creating account")) {
           sessionStorage.setItem("sawPending", "yes");
         }
-      }).observe(button, { childList: true, characterData: true, subtree: true });
+      }).observe(button, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
     });
     await page.getByRole("button", { name: "Create account" }).click();
     await expect
@@ -81,35 +195,54 @@ test.describe("sign-up", () => {
     const email = `Person.${Date.now()}@Example.com`;
     await page.goto("/sign-up");
     await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill("short");
+    await page.getByRole("textbox", { name: "Password" }).fill("short");
     await expect(page.getByLabel("Email")).toHaveValue(email);
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page.locator("#password-error")).toHaveText(
-      "VALIDATION_ERROR. Password must be at least 10 characters",
+      "Use at least 10 characters. Nothing was created.",
     );
+    await expect(page.locator(".well").nth(1)).toHaveCSS(
+      "background-color",
+      "rgb(240, 213, 203)",
+    );
+    await expect(
+      page.getByRole("link", { name: "Sign in instead" }),
+    ).toBeVisible();
     await expect(page.getByLabel("Email")).toHaveValue(email);
-    await expect(page.getByLabel("Password")).toHaveValue("short");
+    await expect(page.getByRole("textbox", { name: "Password" })).toHaveValue(
+      "short",
+    );
 
-    await page.getByLabel("Password").fill("long-enough-1");
+    await page.getByRole("textbox", { name: "Password" }).fill("long-enough-1");
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page.getByRole("status")).toHaveText(
       `Account created for ${email.toLowerCase()}.`,
     );
 
     await page.getByLabel("Email").fill(email.toUpperCase());
-    await page.getByLabel("Password").fill("another-password");
+    await page
+      .getByRole("textbox", { name: "Password" })
+      .fill("another-password");
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page.locator("#email-error")).toHaveText(
-      "EMAIL_TAKEN. An account with that email already exists",
+      "This email already has an account.",
+    );
+    await expect(page.locator(".well").first()).toHaveCSS(
+      "background-color",
+      "rgb(240, 213, 203)",
     );
     await expect(page.getByLabel("Email")).toHaveValue(email.toUpperCase());
-    await expect(page.getByLabel("Password")).toHaveValue("another-password");
+    await expect(page.getByRole("textbox", { name: "Password" })).toHaveValue(
+      "another-password",
+    );
   });
 
   test("fits a phone width", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto("/sign-up");
-    const submit = await box(page.getByRole("button", { name: "Create account" }));
+    const submit = await box(
+      page.getByRole("button", { name: "Create account" }),
+    );
     expect(Math.min(submit.width, submit.height)).toBeGreaterThanOrEqual(44);
     await noHorizontalScroll(page);
   });
