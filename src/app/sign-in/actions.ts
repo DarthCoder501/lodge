@@ -42,7 +42,7 @@ export async function signIn(
 
 async function endSession(): Promise<void> {
   await signOut();
-  redirect("/sign-in");
+  redirect("/sign-in?out=1");
 }
 
 export async function signOutAction(): Promise<void> {
