@@ -26,7 +26,7 @@ async function createAndSignIn(page: Page, email: string) {
 test("no session leaves the account page for sign-in", async ({ page }) => {
   await page.goto("/account");
   await expect(page).toHaveURL(/\/sign-in$/);
-  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   await expect(page.getByRole("status")).toHaveCount(0);
 });
 

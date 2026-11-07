@@ -22,7 +22,7 @@ test("a signed-out request for a lodge route goes to sign in", async ({
   for (const path of ["/applications", "/mailboxes", "/account"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/sign-in$/);
-    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   }
 });
 
@@ -90,6 +90,7 @@ test("the timber wall stays across the desk and sign out leaves", async ({
 
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(1);
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\/sign-in$/);
-  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(page).toHaveURL(/\/sign-in\?out=1$/);
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("You’re signed out.");
 });
