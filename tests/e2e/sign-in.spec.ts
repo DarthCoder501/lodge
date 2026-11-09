@@ -155,7 +155,9 @@ test.describe("sign-in", () => {
 
     await page.goto("/sign-in");
     await page.getByLabel("Email").fill(email);
-    await page.getByRole("textbox", { name: "Password" }).fill("wrong-password");
+    await page
+      .getByRole("textbox", { name: "Password" })
+      .fill("wrong-password");
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page.locator("#sign-in-error")).toHaveText(
       "Email or password is incorrect.",
@@ -164,7 +166,9 @@ test.describe("sign-in", () => {
       "background-color",
       "rgb(240, 213, 203)",
     );
-    await expect(page.getByRole("link", { name: "Create account" })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Create account" }),
+    ).toBeVisible();
     await expect(page.getByLabel("Email")).toHaveValue(email);
     await expect(page.getByRole("textbox", { name: "Password" })).toHaveValue(
       "wrong-password",
@@ -200,17 +204,17 @@ test.describe("sign-in", () => {
     ).not.toContain("session");
   });
 
-  test("leaves for Google with the latch off and keeps Microsoft on the page", async ({
+  test("leaves for Google and Microsoft with the latch off, then on", async ({
     page,
   }) => {
-    const microsoft: string[] = [];
-    page.on("request", (request) => {
-      if (request.url().includes("microsoft")) microsoft.push(request.url());
-    });
     await page.route("**/sign-in/google**", () => new Promise(() => {}));
+    await page.route("**/sign-in/microsoft**", () => new Promise(() => {}));
     await page.goto("/sign-in");
     await expect(
       page.getByRole("checkbox", { name: "Read Gmail for applications" }),
+    ).not.toBeChecked();
+    await expect(
+      page.getByRole("checkbox", { name: "Read Outlook for applications" }),
     ).not.toBeChecked();
 
     const google = page.waitForRequest("**/sign-in/google**");
@@ -226,25 +230,24 @@ test.describe("sign-in", () => {
     await page
       .getByRole("checkbox", { name: "Read Gmail for applications" })
       .check();
-    const linked = page.waitForRequest("**/sign-in/google**");
+    const linkedGoogle = page.waitForRequest("**/sign-in/google**");
     await page
       .getByRole("button", { name: "Continue with Google" })
       .click({ noWaitAfter: true });
-    expect((await linked).url()).toContain("linkAsMailbox=true");
+    expect((await linkedGoogle).url()).toContain("linkAsMailbox=true");
 
     await page.goto("/sign-in");
-    await page.getByRole("button", { name: "Continue with Microsoft" }).click();
+    await page
+      .getByRole("checkbox", { name: "Read Outlook for applications" })
+      .check();
+    const linkedMicrosoft = page.waitForRequest("**/sign-in/microsoft**");
+    await page
+      .getByRole("button", { name: "Continue with Microsoft" })
+      .click({ noWaitAfter: true });
     await expect(
       page.getByRole("heading", { name: "Continuing to Microsoft" }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Back to sign in" }),
-    ).toBeVisible();
-    expect(microsoft).toEqual([]);
-    await page.getByRole("button", { name: "Back to sign in" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Welcome back" }),
-    ).toBeVisible();
+    expect((await linkedMicrosoft).url()).toContain("linkAsMailbox=true");
   });
 
   test("shows the return frame", async ({ page }) => {

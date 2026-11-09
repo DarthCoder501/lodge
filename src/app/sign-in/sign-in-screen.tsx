@@ -281,7 +281,7 @@ function SignInForm({
   const [state, action, pending] = useActionState(signIn, initialState);
   const [showPassword, setShowPassword] = useState(false);
   const [leave, setLeave] = useState<"google" | "microsoft" | null>(null);
-  const [googleHref, setGoogleHref] = useState("/sign-in/google");
+  const [leaveHref, setLeaveHref] = useState("/sign-in/google");
   const fieldKey = state.id ?? "draft";
   const serverPassword = state.password ?? "";
   const [draft, setDraft] = useState({ id: fieldKey, value: serverPassword });
@@ -290,32 +290,31 @@ function SignInForm({
   const showLatch = passwordValue.length > 0 && !pending;
 
   useEffect(() => {
-    if (leave !== "google") return;
+    if (!leave) return;
     const id = window.setTimeout(() => {
-      window.location.assign(googleHref);
+      window.location.assign(leaveHref);
     }, 0);
     return () => window.clearTimeout(id);
-  }, [googleHref, leave]);
+  }, [leave, leaveHref]);
 
-  if (leave === "google") {
-    return (
-      <Leave
-        title="Continuing to Google"
-        body={
-          googleHref.includes("linkAsMailbox")
-            ? "Finish on Google’s page. Lodge never asks for that password. This inbox will be read for applications."
-            : "Finish on Google’s page. Lodge never asks for that password. Inbox linking is off, so this will not read mail."
-        }
-        onBack={() => setLeave(null)}
-      />
-    );
+  function startLeave(provider: "google" | "microsoft", form: HTMLFormElement) {
+    const path =
+      provider === "google" ? "/sign-in/google" : "/sign-in/microsoft";
+    const link = new FormData(form).get("linkAsMailbox") === "true";
+    setLeaveHref(link ? `${path}?linkAsMailbox=true` : path);
+    setLeave(provider);
   }
 
-  if (leave === "microsoft") {
+  if (leave === "google" || leave === "microsoft") {
+    const name = leave === "google" ? "Google" : "Microsoft";
     return (
       <Leave
-        title="Continuing to Microsoft"
-        body="Finish on Microsoft’s page. Lodge never asks for that password. Inbox linking is off, so this will not read mail."
+        title={`Continuing to ${name}`}
+        body={
+          leaveHref.includes("linkAsMailbox")
+            ? `Finish on ${name}’s page. Lodge never asks for that password. This inbox will be read for applications.`
+            : `Finish on ${name}’s page. Lodge never asks for that password. Inbox linking is off, so this will not read mail.`
+        }
         onBack={() => setLeave(null)}
       />
     );
@@ -342,7 +341,9 @@ function SignInForm({
       <form className="account" action={action}>
         <div className="field">
           <label htmlFor="email">Email</label>
-          <div className={`well${error ? " error" : ""}${pending ? " pending" : ""}`}>
+          <div
+            className={`well${error ? " error" : ""}${pending ? " pending" : ""}`}
+          >
             <span className="inlay" aria-hidden="true" />
             <input
               key={`${fieldKey}-email`}
@@ -360,7 +361,9 @@ function SignInForm({
         </div>
         <div className="field">
           <label htmlFor="password">Password</label>
-          <div className={`well${error ? " error" : ""}${pending ? " pending" : ""}`}>
+          <div
+            className={`well${error ? " error" : ""}${pending ? " pending" : ""}`}
+          >
             <span className="inlay" aria-hidden="true" />
             <input
               key={`${fieldKey}-password`}
@@ -405,13 +408,7 @@ function SignInForm({
           method="get"
           onSubmit={(event) => {
             event.preventDefault();
-            const link =
-              new FormData(event.currentTarget).get("linkAsMailbox") ===
-              "true";
-            setGoogleHref(
-              link ? "/sign-in/google?linkAsMailbox=true" : "/sign-in/google",
-            );
-            setLeave("google");
+            startLeave("google", event.currentTarget);
           }}
         >
           <button type="submit">
@@ -428,12 +425,18 @@ function SignInForm({
             <span className="bolt" aria-hidden="true" />
           </label>
         </form>
-        <div className="provider">
-          <button type="button" onClick={() => setLeave("microsoft")}>
+        <form
+          className="provider"
+          action="/sign-in/microsoft"
+          method="get"
+          onSubmit={(event) => {
+            event.preventDefault();
+            startLeave("microsoft", event.currentTarget);
+          }}
+        >
+          <button type="submit">
             <span className="provider-title">Continue with Microsoft</span>
-            <span className="provider-note">
-              Read Outlook for applications
-            </span>
+            <span className="provider-note">Read Outlook for applications</span>
           </button>
           <label className="latch">
             <input
@@ -441,12 +444,13 @@ function SignInForm({
               name="linkAsMailbox"
               value="true"
               aria-label="Read Outlook for applications"
-              disabled
             />
             <span className="bolt" aria-hidden="true" />
           </label>
-        </div>
-        <p className="leave">Leave these off to sign in without reading mail.</p>
+        </form>
+        <p className="leave">
+          Leave these off to sign in without reading mail.
+        </p>
       </div>
     </Access>
   );
