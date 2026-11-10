@@ -6,12 +6,17 @@ import { exec, query } from "../../src/identity/db.ts";
 import { IdentityError } from "../../src/identity/errors.ts";
 import { assertCanConnectMailbox } from "../../src/identity/mailbox-gate.ts";
 import { signInWithPassword } from "../../src/identity/sign-in.ts";
-import { readMemorySessionCookie, requireUser, signOut } from "../../src/identity/session.ts";
+import {
+  readMemorySessionCookie,
+  requireUser,
+  signOut,
+} from "../../src/identity/session.ts";
 import { signUpWithPassword } from "../../src/identity/sign-up.ts";
 import type { CurrentUser } from "../../src/identity/types.ts";
 import {
   clearVerificationOutbox,
   confirmEmail,
+  openVerification,
   readVerificationOutbox,
   sendVerificationLink,
 } from "../../src/identity/verify-email.ts";
@@ -25,18 +30,23 @@ const emails = [
   "verify.fresh@example.com",
   "verify.expired@example.com",
   "verify.resend@example.com",
-  "verify.route@example.com",
+  "verify.open@example.com",
+  "verify.open-old@example.com",
 ];
 
 const invalidLink = "This verification link is no longer valid.";
 
 async function removeFixtures(): Promise<void> {
-  await query("delete from identity.accounts where email = any($1::text[])", [emails]);
+  await query("delete from identity.accounts where email = any($1::text[])", [
+    emails,
+  ]);
 }
 
 before(async () => {
   const dir = join("supabase", "migrations");
-  for (const name of readdirSync(dir).filter((file) => file.endsWith(".sql")).sort()) {
+  for (const name of readdirSync(dir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort()) {
     await exec(readFileSync(join(dir, name), "utf8"));
   }
   await removeFixtures();
@@ -105,19 +115,28 @@ test("an unverified account can sign in, and the mailbox gate waits for the link
     (error: unknown) => {
       const identityError = asIdentityError(error);
       assert.equal(identityError.code, "EMAIL_UNVERIFIED");
-      assert.equal(identityError.message, "Verify your email before connecting a mailbox");
+      assert.equal(
+        identityError.message,
+        "Verify your email before connecting a mailbox",
+      );
       return true;
     },
   );
 
-  const signedIn = await signInWithPassword({ email: "verify.gate@example.com", password });
+  const signedIn = await signInWithPassword({
+    email: "verify.gate@example.com",
+    password,
+  });
   assert.equal(signedIn.id, created.id);
   assert.equal(signedIn.emailVerified, false);
   assert.ok(readMemorySessionCookie());
-  assert.throws(() => assertCanConnectMailbox(signedIn), (error: unknown) => {
-    assert.equal(asIdentityError(error).code, "EMAIL_UNVERIFIED");
-    return true;
-  });
+  assert.throws(
+    () => assertCanConnectMailbox(signedIn),
+    (error: unknown) => {
+      assert.equal(asIdentityError(error).code, "EMAIL_UNVERIFIED");
+      return true;
+    },
+  );
 
   const token = latestToken();
   const rows = await query<{ token_hash: string }>(
@@ -175,7 +194,10 @@ test("a link younger than 24 hours works and an older link fails", async () => {
 });
 
 test("a new link retires the previous one", async () => {
-  const created = await signUpWithPassword({ email: "verify.resend@example.com", password });
+  const created = await signUpWithPassword({
+    email: "verify.resend@example.com",
+    password,
+  });
   const first = latestToken();
   await sendVerificationLink(created);
   const second = latestToken();
@@ -199,32 +221,41 @@ test("a new link retires the previous one", async () => {
   assert.equal(rows[0].count, "0");
 });
 
-test("the verify route confirms a link and rejects a bad one", async () => {
-  await signUpWithPassword({ email: "verify.route@example.com", password });
+test("opening a link verifies it, and a bad, used, or expired link does not", async () => {
+  await signUpWithPassword({ email: "verify.open@example.com", password });
   const token = latestToken();
-  const { GET } = await import("../../src/app/verify/route.ts");
 
-  const bad = await GET(new Request("http://localhost/verify?token=not-a-real-token"));
-  assert.equal(bad.status, 400);
-  const badText = await bad.text();
-  assert.equal(badText, `VALIDATION_ERROR. ${invalidLink}`);
-  assert.equal(badText.includes("not-a-real-token"), false);
+  assert.deepEqual(await openVerification(""), { kind: "invalid" });
+  assert.deepEqual(await openVerification("not-a-real-token"), {
+    kind: "invalid",
+  });
   const stillUnverified = await query<{ email_verified: boolean }>(
     "select email_verified from identity.accounts where email = $1",
-    ["verify.route@example.com"],
+    ["verify.open@example.com"],
   );
   assert.equal(stillUnverified[0].email_verified, false);
 
-  const missing = await GET(new Request("http://localhost/verify"));
-  assert.equal(missing.status, 400);
-  assert.equal(await missing.text(), `VALIDATION_ERROR. ${invalidLink}`);
-
-  const ok = await GET(new Request(`http://localhost/verify?token=${encodeURIComponent(token)}`));
-  assert.equal(ok.status, 200);
-  assert.equal(await ok.text(), "Email verified.");
+  const ok = await openVerification(token);
+  assert.deepEqual(ok, { kind: "verified", email: "verify.open@example.com" });
+  assert.equal(JSON.stringify(ok).includes(token), false);
   const current = await query<{ email_verified: boolean }>(
     "select email_verified from identity.accounts where email = $1",
-    ["verify.route@example.com"],
+    ["verify.open@example.com"],
   );
   assert.equal(current[0].email_verified, true);
+  assert.deepEqual(await openVerification(token), { kind: "used" });
+
+  clearVerificationOutbox();
+  await signUpWithPassword({ email: "verify.open-old@example.com", password });
+  await ageLink("verify.open-old@example.com", "24 hours 1 second");
+  const expired = await openVerification(latestToken());
+  assert.deepEqual(expired, {
+    kind: "expired",
+    email: "verify.open-old@example.com",
+  });
+  const rows = await query<{ email_verified: boolean }>(
+    "select email_verified from identity.accounts where email = $1",
+    ["verify.open-old@example.com"],
+  );
+  assert.equal(rows[0].email_verified, false);
 });
