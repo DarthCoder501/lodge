@@ -1,6 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { Desk } from "../verify/desk.tsx";
+import { ResendNotice } from "../verify/resend.tsx";
 import { signUp, type SignUpFormState } from "./actions.ts";
 
 const initialState: SignUpFormState = {};
@@ -27,6 +29,14 @@ export default function SignUpPage() {
       : undefined;
   const passwordError = state.error && !emailError ? state.error : undefined;
   const showLatch = passwordValue.length > 0 && !pending;
+
+  if (state.createdEmail) {
+    return (
+      <Desk>
+        <ResendNotice email={state.createdEmail} mode="check" />
+      </Desk>
+    );
+  }
 
   return (
     <div className="access">
@@ -167,11 +177,6 @@ export default function SignUpPage() {
               Leave these off to sign in without reading mail.
             </p>
           </div>
-          {state.createdEmail ? (
-            <p className="status" role="status">
-              Account created for {state.createdEmail}.
-            </p>
-          ) : null}
         </div>
       </main>
       <style>{`
@@ -305,7 +310,6 @@ export default function SignUpPage() {
         }
         .alternate a { color: var(--hearth); font-weight: 500; }
         .error { margin: 0; color: var(--error-ink); font-size: 14px; line-height: 19px; }
-        .status { margin: 0; color: var(--espresso); }
         .providers { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
         .provider {
           display: flex;
