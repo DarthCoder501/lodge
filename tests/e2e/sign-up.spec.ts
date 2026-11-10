@@ -215,10 +215,12 @@ test.describe("sign-up", () => {
 
     await page.getByRole("textbox", { name: "Password" }).fill("long-enough-1");
     await page.getByRole("button", { name: "Create account" }).click();
-    await expect(page.getByRole("status")).toHaveText(
-      `Account created for ${email.toLowerCase()}.`,
-    );
+    await expect(
+      page.getByRole("heading", { name: "Check your email" }),
+    ).toBeVisible();
+    await expect(page.getByRole("status")).toContainText(email.toLowerCase());
 
+    await page.goto("/sign-up");
     await page.getByLabel("Email").fill(email.toUpperCase());
     await page
       .getByRole("textbox", { name: "Password" })
