@@ -23,6 +23,7 @@ export type ApplicationFixture = {
 };
 
 export const applicationsSyncedAt = "Synced today, 9:45 AM";
+export const changesSince = "Since yesterday, 5:00 PM";
 
 function mail(id: string) {
   return `https://example.com/mail/${id}`;

@@ -2,12 +2,25 @@ import type { ApplicationFixture } from "../../../fixtures/applications.ts";
 
 export function ApplicationRow({
   application,
+  pinned,
+  onPin,
 }: {
   application: ApplicationFixture;
+  pinned: boolean;
+  onPin: () => void;
 }) {
   return (
-    <li className={application.fresh ? "row fresh" : "row"}>
+    <li className={application.fresh && !pinned ? "row fresh" : "row"}>
       <span className="inlay" aria-hidden="true" />
+      <button
+        type="button"
+        className={pinned ? "pin on" : "pin"}
+        aria-pressed={pinned}
+        aria-label={`${pinned ? "Unpin" : "Pin"} ${application.company}`}
+        onClick={onPin}
+      >
+        <span className="pin-mark" aria-hidden="true" />
+      </button>
       <div className="identity">
         <p className="role">{application.role}</p>
         <p className="meta">
