@@ -25,6 +25,41 @@ export type ApplicationFixture = {
 export const applicationsSyncedAt = "Synced today, 9:45 AM";
 export const changesSince = "Since yesterday, 5:00 PM";
 
+export const deskStatuses = [
+  "empty",
+  "recognized",
+  "loading",
+  "running",
+  "finished",
+  "return",
+  "failed",
+] as const;
+
+export type DeskStatus = (typeof deskStatuses)[number] | "ready";
+
+export function deskStatus(value: string | undefined): DeskStatus {
+  if (value && (deskStatuses as readonly string[]).includes(value)) {
+    return value as DeskStatus;
+  }
+  return "ready";
+}
+
+export function showsApplications(status: DeskStatus) {
+  return (
+    status === "ready" ||
+    status === "running" ||
+    status === "finished" ||
+    status === "return" ||
+    status === "failed"
+  );
+}
+
+export function syncLine(status: DeskStatus) {
+  if (status === "running") return "Syncing";
+  if (status === "finished") return "Synced just now";
+  return applicationsSyncedAt;
+}
+
 function mail(id: string) {
   return `https://example.com/mail/${id}`;
 }

@@ -3,10 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
   applications,
-  applicationsSyncedAt,
+  showsApplications,
+  syncLine,
   type ApplicationFixture,
+  type DeskStatus,
 } from "../../../fixtures/applications.ts";
 import { ApplicationRow } from "./application-row.tsx";
+import { SyncStatus } from "./sync-status.tsx";
 import { WhatsNew } from "./whats-new.tsx";
 
 const filters = [
@@ -46,9 +49,11 @@ function visibleApplications(
 export function ApplicationsDesk({
   email,
   entered,
+  status,
 }: {
   email: string;
   entered: boolean;
+  status: DeskStatus;
 }) {
   const [filter, setFilter] = useState<FilterId>("all");
   const [open, setOpen] = useState(false);
@@ -56,6 +61,8 @@ export function ApplicationsDesk({
   const openButton = useRef<HTMLButtonElement>(null);
   const pinned = pins ?? [];
   const changes = applications.filter((item) => item.fresh);
+  const listed = showsApplications(status);
+  const home = status === "ready";
 
   useEffect(() => {
     setPins(readPins(email));
@@ -92,52 +99,61 @@ export function ApplicationsDesk({
       <div className="list">
         <header className="home-head">
           <h1>Your applications</h1>
-          <div className="head-side">
-            <p className="synced">{applicationsSyncedAt}</p>
-            <button
-              ref={openButton}
-              type="button"
-              className="whats-new"
-              aria-expanded={open}
-              onClick={() => setOpen(true)}
-            >
-              What’s new
-            </button>
-          </div>
+          {listed ? (
+            <div className="head-side">
+              <p className="synced">{syncLine(status)}</p>
+              {home ? (
+                <button
+                  ref={openButton}
+                  type="button"
+                  className="whats-new"
+                  aria-expanded={open}
+                  onClick={() => setOpen(true)}
+                >
+                  What’s new
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </header>
-        {entered ? (
+        {home && entered ? (
           <p className="notice" role="status">
             Signed in as {email}. Your applications are already here.
           </p>
         ) : null}
-        {pins !== null && pins.length === 0 && !entered ? (
+        {home && pins !== null && pins.length === 0 && !entered ? (
           <p className="notice">Nothing is pinned.</p>
         ) : null}
-        <nav className="filters" aria-label="Filters">
-          {filters.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-current={filter === item.id ? "true" : undefined}
-              onClick={() => setFilter(item.id)}
-            >
-              {item.label}
-              {filter === item.id ? (
-                <span className="tick" aria-hidden="true" />
-              ) : null}
-            </button>
-          ))}
-        </nav>
-        <ul className="rows">
-          {visibleApplications(filter, pinned).map((application) => (
-            <ApplicationRow
-              key={application.id}
-              application={application}
-              pinned={pinned.includes(application.id)}
-              onPin={() => togglePin(application.id)}
-            />
-          ))}
-        </ul>
+        <SyncStatus status={status} />
+        {listed ? (
+          <>
+            <nav className="filters" aria-label="Filters">
+              {filters.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-current={filter === item.id ? "true" : undefined}
+                  onClick={() => setFilter(item.id)}
+                >
+                  {item.label}
+                  {filter === item.id ? (
+                    <span className="tick" aria-hidden="true" />
+                  ) : null}
+                </button>
+              ))}
+            </nav>
+            <ul className="rows">
+              {visibleApplications(filter, pinned).map((application) => (
+                <ApplicationRow
+                  key={application.id}
+                  application={application}
+                  pinned={pinned.includes(application.id)}
+                  onPin={() => togglePin(application.id)}
+                />
+              ))}
+            </ul>
+          </>
+        ) : null}
       </div>
       {open ? <WhatsNew changes={changes} onClose={closeSheet} /> : null}
       <style>{`
@@ -300,6 +316,54 @@ export function ApplicationsDesk({
           outline: 2px solid var(--hearth);
           outline-offset: 2px;
         }
+        .quiet { display: flex; flex-direction: column; gap: 16px; max-width: 440px; }
+        .kicker { margin: 0; color: var(--mute); font-size: 14px; line-height: 18px; }
+        .empty {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          padding: 24px 20px;
+          border-radius: 4px;
+          background: var(--travertine);
+        }
+        .empty h2 {
+          margin: 0;
+          color: var(--espresso);
+          font-size: 28px;
+          font-weight: 600;
+          line-height: 36px;
+        }
+        .empty p { margin: 0; color: var(--mute); font-size: 16px; line-height: 21px; }
+        .loading { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+        .loading-line { margin: 0; color: var(--mute); font-size: 16px; line-height: 21px; }
+        .sync-note { margin: 0; color: var(--espresso); font-size: 15px; line-height: 20px; }
+        .sync-note.bad { color: var(--error-ink); }
+        .primary {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
+          width: fit-content;
+          min-width: 168px;
+          height: 48px;
+          padding: 0 24px;
+          border: 0;
+          border-radius: 4px;
+          background: var(--hearth);
+          color: var(--on-hearth);
+          font: inherit;
+          font-size: 16px;
+          font-weight: 600;
+          line-height: 21px;
+          text-decoration: none;
+          cursor: pointer;
+        }
+        .quiet .primary { width: 100%; }
+        .primary:focus-visible { outline: 2px solid var(--hearth); outline-offset: 2px; }
+        .ticks { display: inline-flex; align-items: center; gap: 4px; height: 14px; }
+        .ticks span { width: 4px; background: var(--hearth); border-radius: 1px; }
+        .ticks span:nth-child(odd) { height: 8px; }
+        .ticks span:nth-child(2) { height: 14px; }
         .sheet {
           display: flex;
           flex-direction: column;

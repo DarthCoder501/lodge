@@ -1,3 +1,4 @@
+import { deskStatus } from "../../../fixtures/applications.ts";
 import { requireUser } from "../../../identity/session.ts";
 import { ApplicationsDesk } from "./filters.tsx";
 
@@ -8,9 +9,19 @@ function first(value: string | string[] | undefined) {
 export default async function ApplicationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ entered?: string | string[] }>;
+  searchParams: Promise<{
+    entered?: string | string[];
+    status?: string | string[];
+  }>;
 }) {
-  const entered = first((await searchParams).entered) === "1";
+  const params = await searchParams;
+  const entered = first(params.entered) === "1";
   const email = (await requireUser()).email;
-  return <ApplicationsDesk email={email} entered={entered} />;
+  return (
+    <ApplicationsDesk
+      email={email}
+      entered={entered}
+      status={deskStatus(first(params.status))}
+    />
+  );
 }
