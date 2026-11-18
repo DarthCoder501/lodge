@@ -3,12 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import {
   applications,
+  recognizedNotice,
+  reviewPrompt,
+  reviewStages,
   showsApplications,
+  stageIndex,
   syncLine,
+  withReviews,
   type ApplicationFixture,
   type DeskStatus,
+  type ReviewFrame,
+  type ReviewSave,
 } from "../../../fixtures/applications.ts";
 import { ApplicationRow } from "./application-row.tsx";
+import { readReviews, reviewKey, ReviewSheet } from "./review-wheel.tsx";
 import { SyncStatus } from "./sync-status.tsx";
 import { WhatsNew } from "./whats-new.tsx";
 
@@ -37,29 +45,51 @@ function readPins(email: string): string[] {
 }
 
 function visibleApplications(
+  items: ApplicationFixture[],
   filter: FilterId,
   pins: string[],
 ): ApplicationFixture[] {
-  if (filter === "since") return applications.filter((item) => item.fresh);
+  if (filter === "since") return items.filter((item) => item.fresh);
   if (filter === "pinned")
-    return applications.filter((item) => pins.includes(item.id));
-  return applications;
+    return items.filter((item) => pins.includes(item.id));
+  return items;
 }
 
 export function ApplicationsDesk({
   email,
   entered,
+  review,
   status,
 }: {
   email: string;
   entered: boolean;
+  review: ReviewFrame | null;
   status: DeskStatus;
 }) {
+  const saving =
+    review === "saving-confirm"
+      ? "confirm"
+      : review === "saving-not-a-move"
+        ? "stay"
+        : null;
   const [filter, setFilter] = useState<FilterId>("all");
   const [open, setOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(saving !== null);
+  const [index, setIndex] = useState(
+    review === "saving-not-a-move"
+      ? stageIndex("applied")
+      : stageIndex(reviewPrompt.suggested),
+  );
+  const [saves, setSaves] = useState<Record<string, ReviewSave> | null>(
+    saving !== null || review === "recognized" ? {} : null,
+  );
   const [pins, setPins] = useState<string[] | null>(null);
   const openButton = useRef<HTMLButtonElement>(null);
+  const reviewButton = useRef<HTMLButtonElement>(null);
   const pinned = pins ?? [];
+  const saved = saves ?? {};
+  const rows = withReviews(applications, saved);
+  const prompt = rows.find((item) => item.id === reviewPrompt.id);
   const changes = applications.filter((item) => item.fresh);
   const listed = showsApplications(status);
   const home = status === "ready";
@@ -68,19 +98,54 @@ export function ApplicationsDesk({
     setPins(readPins(email));
   }, [email]);
 
+  useEffect(() => {
+    if (review === "saving-confirm" || review === "saving-not-a-move") {
+      setSaves({});
+      setReviewOpen(true);
+      setIndex(
+        review === "saving-not-a-move"
+          ? stageIndex("applied")
+          : stageIndex(reviewPrompt.suggested),
+      );
+      return;
+    }
+    setReviewOpen(false);
+    setSaves(review === "recognized" ? {} : readReviews(email));
+  }, [email, review]);
+
+  const reviewWasOpen = useRef(false);
+  useEffect(() => {
+    if (reviewWasOpen.current && !reviewOpen) reviewButton.current?.focus();
+    reviewWasOpen.current = reviewOpen;
+  }, [reviewOpen]);
+
   function closeSheet() {
     setOpen(false);
     openButton.current?.focus();
   }
 
+  function closeReview() {
+    setReviewOpen(false);
+  }
+
+  function writeReview(save: ReviewSave) {
+    const next = { ...(saves ?? readReviews(email)), [reviewPrompt.id]: save };
+    // shortcut: this tab only, until review has a spec
+    sessionStorage.setItem(reviewKey(email), JSON.stringify(next));
+    setSaves(next);
+    setReviewOpen(false);
+  }
+
   useEffect(() => {
-    if (!open) return;
+    if (!open && !reviewOpen) return;
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") closeSheet();
+      if (event.key !== "Escape") return;
+      if (reviewOpen) closeReview();
+      else closeSheet();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, reviewOpen]);
 
   function togglePin(id: string) {
     setPins((current) => {
@@ -94,21 +159,27 @@ export function ApplicationsDesk({
     });
   }
 
+  const sheetOpen = open || reviewOpen;
+  const reviewSaved = Boolean(saved[reviewPrompt.id]);
+
   return (
-    <div className={open ? "home with-sheet" : "home"}>
+    <div className={sheetOpen ? "home with-sheet" : "home"}>
       <div className="list">
         <header className="home-head">
           <h1>Your applications</h1>
           {listed ? (
             <div className="head-side">
               <p className="synced">{syncLine(status)}</p>
-              {home ? (
+              {home && !reviewOpen ? (
                 <button
                   ref={openButton}
                   type="button"
                   className="whats-new"
                   aria-expanded={open}
-                  onClick={() => setOpen(true)}
+                  onClick={() => {
+                    setReviewOpen(false);
+                    setOpen(true);
+                  }}
                 >
                   What’s new
                 </button>
@@ -121,8 +192,24 @@ export function ApplicationsDesk({
             Signed in as {email}. Your applications are already here.
           </p>
         ) : null}
-        {home && pins !== null && pins.length === 0 && !entered ? (
+        {home &&
+        pins !== null &&
+        pins.length === 0 &&
+        !entered &&
+        !sheetOpen &&
+        !reviewSaved &&
+        review !== "recognized" ? (
           <p className="notice">Nothing is pinned.</p>
+        ) : null}
+        {home && review === "recognized" ? (
+          <p className="notice pine" role="status">
+            {recognizedNotice}
+          </p>
+        ) : null}
+        {home && saved[reviewPrompt.id]?.kind === "stay" && prompt ? (
+          <p className="notice pine" role="status">
+            Not a move. {prompt.company} stays {prompt.stageLabel}.
+          </p>
         ) : null}
         <SyncStatus status={status} />
         {listed ? (
@@ -143,12 +230,30 @@ export function ApplicationsDesk({
               ))}
             </nav>
             <ul className="rows">
-              {visibleApplications(filter, pinned).map((application) => (
+              {visibleApplications(rows, filter, pinned).map((application) => (
                 <ApplicationRow
                   key={application.id}
                   application={application}
                   pinned={pinned.includes(application.id)}
                   onPin={() => togglePin(application.id)}
+                  onReview={
+                    home &&
+                    !reviewOpen &&
+                    saves !== null &&
+                    application.id === reviewPrompt.id &&
+                    application.stageUnchanged
+                      ? () => {
+                          setOpen(false);
+                          setIndex(stageIndex(reviewPrompt.suggested));
+                          setReviewOpen(true);
+                        }
+                      : undefined
+                  }
+                  reviewRef={
+                    application.id === reviewPrompt.id
+                      ? reviewButton
+                      : undefined
+                  }
                 />
               ))}
             </ul>
@@ -156,6 +261,27 @@ export function ApplicationsDesk({
         ) : null}
       </div>
       {open ? <WhatsNew changes={changes} onClose={closeSheet} /> : null}
+      {reviewOpen && prompt ? (
+        <ReviewSheet
+          company={prompt.company}
+          excerpt={reviewPrompt.excerpt}
+          keptLabel={prompt.stageLabel}
+          index={index}
+          saving={saving}
+          onMove={(step) =>
+            setIndex((current) => {
+              const count = reviewStages.length;
+              return (current + step + count) % count;
+            })
+          }
+          onConfirm={() => {
+            const stage = reviewStages[index];
+            if (!stage) return;
+            writeReview({ kind: "confirm", stage: stage.id });
+          }}
+          onStay={() => writeReview({ kind: "stay" })}
+        />
+      ) : null}
       <style>{`
         .home { display: flex; flex-direction: column; gap: 16px; }
         .home.with-sheet {
@@ -187,6 +313,7 @@ export function ApplicationsDesk({
         .synced, .since, .who, .notice { margin: 0; }
         .synced, .since { color: var(--mute); font-size: 13px; line-height: 17px; }
         .notice { color: var(--espresso); font-size: 16px; line-height: 20px; }
+        .notice.pine { color: var(--pine); font-size: 15px; line-height: 20px; }
         .whats-new, .close, .pin {
           border: 0;
           background: transparent;
@@ -302,17 +429,22 @@ export function ApplicationsDesk({
           font-variant-numeric: tabular-nums;
         }
         .when { font-variant-numeric: tabular-nums; }
-        .source {
+        .source, .review-link {
           display: inline-flex;
           align-items: center;
           min-height: 24px;
+          padding: 0;
+          border: 0;
+          background: transparent;
           color: var(--hearth);
+          font: inherit;
           font-size: 14px;
           font-weight: 500;
           line-height: 18px;
           text-decoration: none;
+          cursor: pointer;
         }
-        .source:focus-visible {
+        .source:focus-visible, .review-link:focus-visible {
           outline: 2px solid var(--hearth);
           outline-offset: 2px;
         }

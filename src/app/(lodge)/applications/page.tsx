@@ -1,4 +1,4 @@
-import { deskStatus } from "../../../fixtures/applications.ts";
+import { deskStatus, reviewFrame } from "../../../fixtures/applications.ts";
 import { requireUser } from "../../../identity/session.ts";
 import { ApplicationsDesk } from "./filters.tsx";
 
@@ -11,6 +11,7 @@ export default async function ApplicationsPage({
 }: {
   searchParams: Promise<{
     entered?: string | string[];
+    review?: string | string[];
     status?: string | string[];
   }>;
 }) {
@@ -21,6 +22,7 @@ export default async function ApplicationsPage({
     <ApplicationsDesk
       email={email}
       entered={entered}
+      review={reviewFrame(first(params.review))}
       status={deskStatus(first(params.status))}
     />
   );

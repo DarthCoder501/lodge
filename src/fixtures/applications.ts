@@ -24,6 +24,80 @@ export type ApplicationFixture = {
 
 export const applicationsSyncedAt = "Synced today, 9:45 AM";
 export const changesSince = "Since yesterday, 5:00 PM";
+export const recognizedNotice = "Fable moved to Offer from a recognized email.";
+
+export const reviewStages: { id: ApplicationStage; label: string }[] = [
+  { id: "applied", label: "Applied" },
+  { id: "oa-not-done", label: "OA not done" },
+  { id: "interview-not-done", label: "Interview not done" },
+  { id: "in-progress", label: "In progress" },
+  { id: "offer", label: "Offer" },
+  { id: "rejected", label: "Rejected" },
+];
+
+export const reviewPrompt = {
+  id: "browser-company",
+  suggested: "interview-not-done" as const,
+  excerpt: "We’d love a little time to hear about your process.",
+};
+
+export type ReviewSave =
+  | { kind: "confirm"; stage: ApplicationStage }
+  | { kind: "stay" };
+
+export function stageIndex(stage: ApplicationStage) {
+  const index = reviewStages.findIndex((item) => item.id === stage);
+  return index < 0 ? 0 : index;
+}
+
+export function parseReviews(value: unknown): Record<string, ReviewSave> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const saves: Record<string, ReviewSave> = {};
+  for (const [id, save] of Object.entries(value)) {
+    if (!save || typeof save !== "object") continue;
+    const kind = (save as { kind?: unknown }).kind;
+    if (kind === "stay") {
+      saves[id] = { kind: "stay" };
+      continue;
+    }
+    const stage = (save as { stage?: unknown }).stage;
+    const match = reviewStages.find((item) => item.id === stage);
+    if (kind === "confirm" && match) {
+      saves[id] = { kind: "confirm", stage: match.id };
+    }
+  }
+  return saves;
+}
+
+export function withReviews(
+  items: ApplicationFixture[],
+  saves: Record<string, ReviewSave>,
+): ApplicationFixture[] {
+  const next = items.map((item) => {
+    const save = saves[item.id];
+    if (!save) return item;
+    if (save.kind === "stay") return { ...item, stageUnchanged: false };
+    const stage = reviewStages.find((entry) => entry.id === save.stage);
+    if (!stage) return item;
+    return {
+      ...item,
+      stage: stage.id,
+      stageLabel: stage.label,
+      event: "Stage confirmed by you",
+      time: "Just now",
+      stageUnchanged: false,
+    };
+  });
+  const confirmed = new Set(
+    Object.entries(saves)
+      .filter(([, save]) => save.kind === "confirm")
+      .map(([id]) => id),
+  );
+  return [
+    ...next.filter((item) => confirmed.has(item.id)),
+    ...next.filter((item) => !confirmed.has(item.id)),
+  ];
+}
 
 export const deskStatuses = [
   "empty",
@@ -35,7 +109,22 @@ export const deskStatuses = [
   "failed",
 ] as const;
 
+export const reviewFrames = [
+  "recognized",
+  "saving-confirm",
+  "saving-not-a-move",
+] as const;
+
+export type ReviewFrame = (typeof reviewFrames)[number];
+
 export type DeskStatus = (typeof deskStatuses)[number] | "ready";
+
+export function reviewFrame(value: string | undefined): ReviewFrame | null {
+  if (value && (reviewFrames as readonly string[]).includes(value)) {
+    return value as ReviewFrame;
+  }
+  return null;
+}
 
 export function deskStatus(value: string | undefined): DeskStatus {
   if (value && (deskStatuses as readonly string[]).includes(value)) {

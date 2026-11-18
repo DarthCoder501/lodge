@@ -1,13 +1,18 @@
+import type { Ref } from "react";
 import type { ApplicationFixture } from "../../../fixtures/applications.ts";
 
 export function ApplicationRow({
   application,
   pinned,
   onPin,
+  onReview,
+  reviewRef,
 }: {
   application: ApplicationFixture;
   pinned: boolean;
   onPin: () => void;
+  onReview?: () => void;
+  reviewRef?: Ref<HTMLButtonElement>;
 }) {
   return (
     <li className={application.fresh && !pinned ? "row fresh" : "row"}>
@@ -34,6 +39,17 @@ export function ApplicationRow({
         <p className="stage-word">{application.stageLabel}</p>
         <p className="when">{application.time}</p>
       </div>
+      {onReview ? (
+        <button
+          ref={reviewRef}
+          type="button"
+          className="review-link"
+          aria-label={`Review ${application.company}`}
+          onClick={onReview}
+        >
+          Review
+        </button>
+      ) : null}
       <a
         className="source"
         href={application.sourceUrl}
