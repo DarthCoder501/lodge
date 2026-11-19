@@ -22,7 +22,9 @@ test("a signed-out request for a lodge route goes to sign in", async ({
   for (const path of ["/applications", "/mailboxes", "/account"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/sign-in$/);
-    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Welcome back" }),
+    ).toBeVisible();
   }
 });
 
@@ -41,16 +43,16 @@ test("the timber wall stays across the desk and sign out leaves", async ({
   await expect(wall).toContainText(email);
 
   const routes = [
-    ["/applications", "Applications"],
-    ["/mailboxes", "Mailboxes"],
-    ["/account", "Account"],
+    ["/applications", "Applications", "Applications"],
+    ["/mailboxes", "Mailboxes", "Your mailboxes"],
+    ["/account", "Account", "Account"],
   ] as const;
 
-  for (const [path, name] of routes) {
+  for (const [path, name, heading] of routes) {
     await page.goto(path);
-    await expect(page.getByRole("heading", { name })).toBeVisible();
+    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
     await expect(wall).toBeVisible();
-    const current = page.getByRole("link", { name });
+    const current = page.getByRole("link", { name, exact: true });
     await expect(current).toHaveAttribute("aria-current", "page");
     const [
       linkBackground,
@@ -64,7 +66,7 @@ test("the timber wall stays across the desk and sign out leaves", async ({
       desk.evaluate((element) => getComputedStyle(element).backgroundColor),
       desk.evaluate((element) => getComputedStyle(element).color),
       page
-        .getByRole("link", { name: "Applications" })
+        .getByRole("link", { name: "Applications", exact: true })
         .evaluate((element) => getComputedStyle(element).color),
     ]);
     expect(linkBackground).toBe("rgb(122, 56, 34)");
@@ -91,6 +93,8 @@ test("the timber wall stays across the desk and sign out leaves", async ({
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(1);
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in\?out=1$/);
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Welcome back" }),
+  ).toBeVisible();
   await expect(page.getByRole("status")).toHaveText("You’re signed out.");
 });
