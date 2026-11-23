@@ -35,3 +35,20 @@ export function listedMailboxes(status: MailboxStatus): MailboxFixture[] {
   if (status === "two") return mailboxes;
   return [];
 }
+
+export function disconnectLines(gone: MailboxFixture, kept: MailboxFixture[]) {
+  const names = kept.map((mailbox) => mailbox.provider);
+  const list = names.join(" and ");
+  const still =
+    names.length === 0
+      ? ""
+      : ` ${list} ${names.length === 1 ? "stays" : "stay"} connected.`;
+  const left =
+    names.length === 0
+      ? ""
+      : ` ${list} ${names.length === 1 ? "is" : "are"} still connected.`;
+  return {
+    sheet: `Sync stops. Applications stay.${still}`,
+    done: `${gone.provider} stopped syncing. Applications stay.${left}`,
+  };
+}

@@ -1,9 +1,24 @@
-import { listedMailboxes, mailboxStatus } from "../../../fixtures/mailboxes.ts";
+import { mailboxStatus } from "../../../fixtures/mailboxes.ts";
 import { requireUser } from "../../../identity/session.ts";
 import { resendVerificationLink } from "../../../identity/verify-email.ts";
+import { MailboxesDesk } from "./mailbox-sheet.tsx";
 
 function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function provider(value: string | undefined): "Gmail" | "Outlook" | null {
+  if (value === "gmail") return "Gmail";
+  if (value === "outlook") return "Outlook";
+  return null;
+}
+
+function mailboxId(value: string | undefined) {
+  return value === "gmail" || value === "outlook" ? value : null;
+}
+
+function linkChoice(value: string | undefined): "in" | "off" | null {
+  return value === "in" || value === "off" ? value : null;
 }
 
 async function sendLink() {
@@ -15,18 +30,23 @@ async function sendLink() {
 export default async function MailboxesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string | string[] }>;
+  searchParams: Promise<{
+    status?: string | string[];
+    connect?: string | string[];
+    disconnect?: string | string[];
+    disconnecting?: string | string[];
+    link?: string | string[];
+  }>;
 }) {
   const user = await requireUser();
   const params = await searchParams;
   const status = mailboxStatus(first(params.status));
-  const rows = user.emailVerified ? listedMailboxes(status) : [];
 
   return (
-    <div className="mail">
-      <h1>Your mailboxes</h1>
+    <>
       {!user.emailVerified ? (
-        <>
+        <div className="mail">
+          <h1>Your mailboxes</h1>
           <p className="gate" role="alert">
             Verify your email before a mailbox can connect.
           </p>
@@ -48,67 +68,16 @@ export default async function MailboxesPage({
           <button className="connect" type="button" disabled>
             Connect Outlook
           </button>
-        </>
-      ) : status === "loading" ? (
-        <div className="loading" role="status" aria-busy="true">
-          <p className="loading-line">Loading your mailboxes</p>
-          <span className="ticks" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
         </div>
       ) : (
-        <>
-          {rows.length === 0 ? (
-            <>
-              <p className="note">Your email is verified.</p>
-              <div className="empty">
-                <h2>No mailbox yet</h2>
-                <p>
-                  Connect one when you want. Disconnecting never deletes
-                  applications.
-                </p>
-              </div>
-            </>
-          ) : (
-            <ul className="rows">
-              {rows.map((mailbox) => (
-                <li key={mailbox.id} className="row">
-                  <span className="inlay" aria-hidden="true" />
-                  <div className="identity">
-                    <p className="address">{mailbox.address}</p>
-                    <p className="meta">{mailbox.provider} · Connected</p>
-                  </div>
-                  {/* shortcut: label only, disconnect sheet is the next task */}
-                  <button
-                    type="button"
-                    className="disconnect"
-                    aria-label={`Disconnect ${mailbox.address}`}
-                  >
-                    Disconnect
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {rows.length > 0 ? (
-            <p className="optional">Another inbox is optional.</p>
-          ) : null}
-          {/* shortcut: no provider request until connect has a spec */}
-          <button
-            className={rows.length === 0 ? "connect center" : "connect"}
-            type="button"
-          >
-            Connect Gmail
-          </button>
-          <button
-            className={rows.length === 0 ? "connect center" : "connect"}
-            type="button"
-          >
-            Connect Outlook
-          </button>
-        </>
+        <MailboxesDesk
+          email={user.email}
+          status={status}
+          connect={provider(first(params.connect))}
+          disconnectId={mailboxId(first(params.disconnect))}
+          disconnectingId={mailboxId(first(params.disconnecting))}
+          link={linkChoice(first(params.link))}
+        />
       )}
       <style>{`
         .mail {
@@ -245,7 +214,85 @@ export default async function MailboxesPage({
         .ticks span { width: 4px; background: var(--hearth); border-radius: 1px; }
         .ticks span:nth-child(odd) { height: 8px; }
         .ticks span:nth-child(2) { height: 14px; }
+        .mail.with-sheet {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          align-items: start;
+          gap: 24px;
+          width: 100%;
+          max-width: none;
+        }
+        .col {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 16px;
+          width: min(100%, 440px);
+          min-width: 0;
+        }
+        .note.pine { color: var(--pine); }
+        .inlay.hot { background: var(--hearth); }
+        .sheet {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 12px;
+          box-sizing: border-box;
+          width: 100%;
+          padding: 24px;
+          background: var(--travertine);
+        }
+        .sheet-ask, .sheet-address, .sheet-stay { margin: 0; }
+        .sheet-ask { color: var(--mute); font-size: 14px; line-height: 18px; }
+        .sheet-address {
+          color: var(--espresso);
+          font-size: 22px;
+          font-weight: 600;
+          line-height: 29px;
+          overflow-wrap: anywhere;
+        }
+        .sheet-stay { color: var(--mute); font-size: 15px; line-height: 20px; }
+        .drop, .quiet-cancel {
+          border: 0;
+          font: inherit;
+          cursor: pointer;
+        }
+        .drop {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          width: 100%;
+          height: 48px;
+          border-radius: 4px;
+          background: var(--well-error);
+          color: var(--error-ink);
+          font-size: 16px;
+          font-weight: 600;
+          line-height: 21px;
+        }
+        .drop .ticks span { background: var(--error-ink); }
+        .quiet-cancel {
+          min-height: 44px;
+          padding: 0;
+          background: transparent;
+          color: var(--mute);
+          font-size: 15px;
+          font-weight: 500;
+          line-height: 44px;
+        }
+        .drop:focus-visible, .quiet-cancel:focus-visible {
+          outline: 2px solid var(--hearth);
+          outline-offset: 2px;
+        }
+        @media (min-width: 768px) {
+          .mail.with-sheet {
+            grid-template-columns: minmax(0, 440px) minmax(16rem, 25rem);
+            gap: 0;
+          }
+          .sheet { padding: 0 24px 24px; }
+        }
       `}</style>
-    </div>
+    </>
   );
 }
