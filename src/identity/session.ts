@@ -26,7 +26,8 @@ const memory = new Map<string, SessionCookie>();
 
 function useMemory(): boolean {
   return (
-    process.env.NODE_ENV !== "production" && process.env.IDENTITY_COOKIE_STORE === "memory"
+    process.env.NODE_ENV !== "production" &&
+    process.env.IDENTITY_COOKIE_STORE === "memory"
   );
 }
 
@@ -80,7 +81,8 @@ async function clearSessionCookie(): Promise<void> {
 }
 
 function loginProvider(value: string): LoginProvider {
-  if (value === "google" || value === "microsoft" || value === "password") return value;
+  if (value === "google" || value === "microsoft" || value === "password")
+    return value;
   throw new Error(`Unexpected login provider: ${value}`);
 }
 
@@ -93,9 +95,21 @@ function toCurrentUser(row: AccountRow): CurrentUser {
   };
 }
 
+export async function currentUser(): Promise<CurrentUser | null> {
+  try {
+    return await requireUser();
+  } catch (error) {
+    if (error instanceof IdentityError && error.code === "UNAUTHENTICATED") {
+      return null;
+    }
+    throw error;
+  }
+}
+
 export async function requireUser(): Promise<CurrentUser> {
   const sessionId = await readSessionId();
-  if (!sessionId) throw new IdentityError("UNAUTHENTICATED", "Sign in required");
+  if (!sessionId)
+    throw new IdentityError("UNAUTHENTICATED", "Sign in required");
   const rows = await query<AccountRow>(
     `select a.id::text as id, a.email, a.email_verified, a.login_provider
      from identity.sessions s

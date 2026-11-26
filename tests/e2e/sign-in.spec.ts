@@ -6,6 +6,18 @@ async function box(locator: Locator) {
   return value!;
 }
 
+async function rememberHeading(page: Page) {
+  await page.evaluate(() => {
+    sessionStorage.removeItem("hideHeading");
+    window.addEventListener("pagehide", () => {
+      sessionStorage.setItem(
+        "hideHeading",
+        document.querySelector("h1")?.textContent ?? "none",
+      );
+    });
+  });
+}
+
 async function noHorizontalScroll(page: Page) {
   const overflows = await page.evaluate(
     () =>
@@ -65,24 +77,22 @@ test.describe("sign-in", () => {
     expect(labelGap).toBeGreaterThanOrEqual(0);
     expect(labelGap).toBeLessThan(fieldGap);
 
-    const gmail = page.getByRole("checkbox", {
-      name: "Read Gmail for applications",
-    });
+    await expect(
+      page.getByRole("button", { name: "Continue with Google" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Continue with Microsoft" }),
+    ).toHaveCount(0);
+    const gmail = page.getByRole("checkbox", { name: "Sign in with Google" });
     await expect(gmail).not.toBeChecked();
     const outlook = page.getByRole("checkbox", {
-      name: "Read Outlook for applications",
+      name: "Sign in with Microsoft",
     });
     await expect(outlook).not.toBeChecked();
-    const google = page.getByRole("button", { name: "Continue with Google" });
     const linkBox = await box(gmail);
-    const googleBox = await box(google);
-    expect(Math.min(linkBox.width, linkBox.height)).toBeGreaterThanOrEqual(24);
-    expect(Math.min(googleBox.width, googleBox.height)).toBeGreaterThanOrEqual(
-      44,
-    );
-    expect(linkBox.x - (googleBox.x + googleBox.width)).toBeGreaterThanOrEqual(
-      8,
-    );
+    const titleBox = await box(page.locator(".provider .copy").first());
+    expect(Math.min(linkBox.width, linkBox.height)).toBeGreaterThanOrEqual(44);
+    expect(linkBox.x - (titleBox.x + titleBox.width)).toBeGreaterThanOrEqual(8);
 
     const [
       wellBackground,
@@ -101,7 +111,10 @@ test.describe("sign-in", () => {
       page
         .getByRole("button", { name: "Sign in" })
         .evaluate((element) => getComputedStyle(element).backgroundColor),
-      google.evaluate((element) => getComputedStyle(element).backgroundColor),
+      page
+        .locator(".provider")
+        .first()
+        .evaluate((element) => getComputedStyle(element).backgroundColor),
       page
         .getByRole("link", { name: "Create account" })
         .evaluate((element) => getComputedStyle(element).color),
@@ -204,50 +217,52 @@ test.describe("sign-in", () => {
     ).not.toContain("session");
   });
 
-  test("leaves for Google and Microsoft with the latch off, then on", async ({
-    page,
-  }) => {
-    await page.route("**/sign-in/google**", () => new Promise(() => {}));
-    await page.route("**/sign-in/microsoft**", () => new Promise(() => {}));
+  test("sliding a provider on starts that sign-in", async ({ page }) => {
+    await page.route("**/sign-in/google**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><title>google-start</title>",
+      }),
+    );
+    await page.route("**/sign-in/microsoft**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><title>microsoft-start</title>",
+      }),
+    );
     await page.goto("/sign-in");
     await expect(
-      page.getByRole("checkbox", { name: "Read Gmail for applications" }),
+      page.getByRole("checkbox", { name: "Sign in with Google" }),
     ).not.toBeChecked();
     await expect(
-      page.getByRole("checkbox", { name: "Read Outlook for applications" }),
+      page.getByRole("checkbox", { name: "Sign in with Microsoft" }),
     ).not.toBeChecked();
+    await expect(
+      page.getByRole("button", { name: /Continue with/ }),
+    ).toHaveCount(0);
 
+    await rememberHeading(page);
     const google = page.waitForRequest("**/sign-in/google**");
-    await page
-      .getByRole("button", { name: "Continue with Google" })
-      .click({ noWaitAfter: true });
-    await expect(
-      page.getByRole("heading", { name: "Continuing to Google" }),
-    ).toBeVisible();
-    expect((await google).url()).not.toContain("linkAsMailbox");
+    await page.getByRole("checkbox", { name: "Sign in with Google" }).click();
+    await expect(page).toHaveURL(/\/sign-in\/google\?linkAsMailbox=true$/);
+    expect((await google).url()).toContain("linkAsMailbox=true");
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("hideHeading")),
+    ).toBe("Continuing to Google");
 
     await page.goto("/sign-in");
+    await rememberHeading(page);
+    const microsoft = page.waitForRequest("**/sign-in/microsoft**");
     await page
-      .getByRole("checkbox", { name: "Read Gmail for applications" })
-      .check();
-    const linkedGoogle = page.waitForRequest("**/sign-in/google**");
-    await page
-      .getByRole("button", { name: "Continue with Google" })
-      .click({ noWaitAfter: true });
-    expect((await linkedGoogle).url()).toContain("linkAsMailbox=true");
-
-    await page.goto("/sign-in");
-    await page
-      .getByRole("checkbox", { name: "Read Outlook for applications" })
-      .check();
-    const linkedMicrosoft = page.waitForRequest("**/sign-in/microsoft**");
-    await page
-      .getByRole("button", { name: "Continue with Microsoft" })
-      .click({ noWaitAfter: true });
-    await expect(
-      page.getByRole("heading", { name: "Continuing to Microsoft" }),
-    ).toBeVisible();
-    expect((await linkedMicrosoft).url()).toContain("linkAsMailbox=true");
+      .getByRole("checkbox", { name: "Sign in with Microsoft" })
+      .click();
+    await expect(page).toHaveURL(/\/sign-in\/microsoft\?linkAsMailbox=true$/);
+    expect((await microsoft).url()).toContain("linkAsMailbox=true");
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("hideHeading")),
+    ).toBe("Continuing to Microsoft");
   });
 
   test("shows the return frame", async ({ page }) => {

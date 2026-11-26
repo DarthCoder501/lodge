@@ -2,6 +2,13 @@ import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
+  beginSync,
+  connectMailbox,
+  startSync,
+} from "../../../../lodge/store.ts";
+import { requireUser } from "../../../../identity/session.ts";
+import {
+  MICROSOFT_INTENT_COOKIE,
   MICROSOFT_LINK_COOKIE,
   MICROSOFT_STATE_COOKIE,
   exchangeAuthorizationCode,
@@ -21,8 +28,10 @@ export async function GET(request: Request): Promise<void> {
   const jar = await cookies();
   const stored = jar.get(MICROSOFT_STATE_COOKIE)?.value;
   const link = jar.get(MICROSOFT_LINK_COOKIE)?.value === "1";
+  const connect = jar.get(MICROSOFT_INTENT_COOKIE)?.value === "connect";
   jar.delete(MICROSOFT_STATE_COOKIE);
   jar.delete(MICROSOFT_LINK_COOKIE);
+  jar.delete(MICROSOFT_INTENT_COOKIE);
 
   const state = url.searchParams.get("state");
   const code = url.searchParams.get("code");
@@ -41,19 +50,41 @@ export async function GET(request: Request): Promise<void> {
     forwardedHost: request.headers.get("x-forwarded-host"),
     forwardedProto: request.headers.get("x-forwarded-proto"),
   });
+  let destination = "/applications";
   try {
     const profile = await exchangeAuthorizationCode({
       provider: "microsoft",
       code,
       redirectUri: microsoftCallbackUrl(origin),
+      readMail: link,
     });
-    await signInWithProvider({
-      provider: "microsoft",
-      email: profile.email,
-      linkAsMailbox: link,
-    });
+    if (connect) {
+      const user = await requireUser();
+      if (!profile.refreshToken) {
+        destination = "/mailboxes?notice=unread";
+      } else {
+        const mailboxId = await connectMailbox({
+          accountId: user.id,
+          address: profile.email,
+          provider: "outlook",
+          refreshToken: profile.refreshToken,
+        });
+        const runId = await beginSync(mailboxId);
+        if (runId) startSync(runId);
+        destination = "/mailboxes";
+      }
+    } else {
+      await signInWithProvider({
+        provider: "microsoft",
+        email: profile.email,
+        linkAsMailbox: link,
+        refreshToken: profile.refreshToken,
+      });
+    }
   } catch {
-    redirect("/sign-in?microsoft=failed");
+    redirect(
+      connect ? "/mailboxes?notice=unread" : "/sign-in?microsoft=failed",
+    );
   }
-  redirect("/sign-in");
+  redirect(destination);
 }

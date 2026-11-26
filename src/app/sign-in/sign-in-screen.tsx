@@ -44,7 +44,7 @@ function Access({ children }: { children: ReactNode }) {
           background: var(--timber);
           color: var(--on-timber);
         }
-        .mark, .place, .privacy, .note, .error, .status, .leave { margin: 0; }
+        .mark, .place, .privacy, .note, .error, .status { margin: 0; }
         .mark { font-size: 18px; font-weight: 600; line-height: 24px; }
         .place { max-width: 390px; font-size: 32px; font-weight: 400; line-height: 43px; }
         .privacy { max-width: 390px; font-size: 14px; line-height: 19px; color: var(--on-timber-mute); }
@@ -72,6 +72,14 @@ function Access({ children }: { children: ReactNode }) {
         .note { color: var(--mute); font-size: 16px; line-height: 22px; }
         .error { color: var(--error-ink); font-size: 16px; line-height: 22px; }
         .status { color: var(--espresso); font-size: 16px; line-height: 22px; }
+        .enter {
+          display: inline-flex;
+          align-items: center;
+          min-height: 44px;
+          color: var(--hearth);
+          font-weight: 600;
+          text-underline-offset: 0.2em;
+        }
         form.account { display: flex; flex-direction: column; gap: 18px; margin: 0; }
         .field { display: flex; flex-direction: column; gap: 8px; }
         label { font-size: 14px; line-height: 19px; font-weight: 500; color: var(--espresso); }
@@ -189,19 +197,9 @@ function Access({ children }: { children: ReactNode }) {
           border-radius: 4px;
           color: inherit;
           font: inherit;
-        }
-        .provider button {
-          flex: 1;
-          min-width: 0;
-          min-height: 44px;
-          padding: 0;
-          border: 0;
-          background: transparent;
-          color: inherit;
-          font: inherit;
-          text-align: left;
           cursor: pointer;
         }
+        .provider .copy { flex: 1; min-width: 0; }
         .provider-title, .provider-note { display: block; }
         .provider-title { color: var(--espresso); font-size: 16px; font-weight: 500; line-height: 22px; }
         .provider-note { color: var(--mute); font-size: 13px; line-height: 18px; }
@@ -226,7 +224,6 @@ function Access({ children }: { children: ReactNode }) {
         }
         .latch:has(input:checked) { justify-content: flex-end; background: var(--hearth); }
         .bolt { width: 22px; height: 28px; border-radius: 2px; background: var(--on-hearth); pointer-events: none; }
-        .leave { color: var(--mute); font-size: 13px; line-height: 18px; }
         a:focus-visible, button:focus-visible, .latch:focus-within {
           outline: 2px solid var(--hearth);
           outline-offset: 2px;
@@ -297,11 +294,10 @@ function SignInForm({
     return () => window.clearTimeout(id);
   }, [leave, leaveHref]);
 
-  function startLeave(provider: "google" | "microsoft", form: HTMLFormElement) {
+  function startLeave(provider: "google" | "microsoft") {
     const path =
       provider === "google" ? "/sign-in/google" : "/sign-in/microsoft";
-    const link = new FormData(form).get("linkAsMailbox") === "true";
-    setLeaveHref(link ? `${path}?linkAsMailbox=true` : path);
+    setLeaveHref(`${path}?linkAsMailbox=true`);
     setLeave(provider);
   }
 
@@ -310,11 +306,7 @@ function SignInForm({
     return (
       <Leave
         title={`Continuing to ${name}`}
-        body={
-          leaveHref.includes("linkAsMailbox")
-            ? `Finish on ${name}’s page. Lodge never asks for that password. This inbox will be read for applications.`
-            : `Finish on ${name}’s page. Lodge never asks for that password. Inbox linking is off, so this will not read mail.`
-        }
+        body={`Finish on ${name}’s page. Lodge never asks for that password. This inbox will be read for applications.`}
         onBack={() => setLeave(null)}
       />
     );
@@ -402,55 +394,38 @@ function SignInForm({
         <a href="/sign-up">Create account</a>
       </p>
       <div className="providers">
-        <form
-          className="provider"
-          action="/sign-in/google"
-          method="get"
-          onSubmit={(event) => {
-            event.preventDefault();
-            startLeave("google", event.currentTarget);
-          }}
-        >
-          <button type="submit">
-            <span className="provider-title">Continue with Google</span>
-            <span className="provider-note">Read Gmail for applications</span>
-          </button>
-          <label className="latch">
-            <input
-              type="checkbox"
-              name="linkAsMailbox"
-              value="true"
-              aria-label="Read Gmail for applications"
-            />
-            <span className="bolt" aria-hidden="true" />
+        {(
+          [
+            ["google", "Sign in with Google", "Read Gmail for applications"],
+            [
+              "microsoft",
+              "Sign in with Microsoft",
+              "Read Outlook for applications",
+            ],
+          ] as const
+        ).map(([provider, title, note]) => (
+          <label className="provider" key={provider}>
+            <span className="copy">
+              <span className="provider-title" id={`${provider}-title`}>
+                {title}
+              </span>
+              <span className="provider-note" id={`${provider}-note`}>
+                {note}
+              </span>
+            </span>
+            <span className="latch">
+              <input
+                type="checkbox"
+                aria-labelledby={`${provider}-title`}
+                aria-describedby={`${provider}-note`}
+                onChange={(event) => {
+                  if (event.currentTarget.checked) startLeave(provider);
+                }}
+              />
+              <span className="bolt" aria-hidden="true" />
+            </span>
           </label>
-        </form>
-        <form
-          className="provider"
-          action="/sign-in/microsoft"
-          method="get"
-          onSubmit={(event) => {
-            event.preventDefault();
-            startLeave("microsoft", event.currentTarget);
-          }}
-        >
-          <button type="submit">
-            <span className="provider-title">Continue with Microsoft</span>
-            <span className="provider-note">Read Outlook for applications</span>
-          </button>
-          <label className="latch">
-            <input
-              type="checkbox"
-              name="linkAsMailbox"
-              value="true"
-              aria-label="Read Outlook for applications"
-            />
-            <span className="bolt" aria-hidden="true" />
-          </label>
-        </form>
-        <p className="leave">
-          Leave these off to sign in without reading mail.
-        </p>
+        ))}
       </div>
     </Access>
   );
@@ -465,6 +440,9 @@ function SignedIn({ email }: { email: string }) {
       <p className="status" role="status">
         Signed in as {email}.
       </p>
+      <a className="enter" href="/applications">
+        Your applications
+      </a>
       <form action={action}>
         <button className="primary" type="submit" disabled={pending}>
           {pending ? "Signing out" : "Sign out"}

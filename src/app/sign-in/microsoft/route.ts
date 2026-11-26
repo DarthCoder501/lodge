@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { currentUser } from "../../../identity/session.ts";
 import {
+  MICROSOFT_INTENT_COOKIE,
   MICROSOFT_LINK_COOKIE,
   MICROSOFT_STATE_COOKIE,
   microsoftCallbackUrl,
@@ -20,8 +22,15 @@ export async function GET(request: Request): Promise<void> {
     forwardedHost: request.headers.get("x-forwarded-host"),
     forwardedProto: request.headers.get("x-forwarded-proto"),
   });
+  const params = new URL(request.url).searchParams;
+  const intent = params.get("intent") === "connect" ? "connect" : "signin";
   const linkAsMailbox =
-    new URL(request.url).searchParams.get("linkAsMailbox") === "true";
+    intent === "connect" || params.get("linkAsMailbox") === "true";
+  if (intent === "connect") {
+    const user = await currentUser();
+    if (!user) redirect("/sign-in");
+    if (!user.emailVerified) redirect("/mailboxes");
+  }
   const state = randomBytes(32).toString("base64url");
   const jar = await cookies();
   const options = {
@@ -33,6 +42,7 @@ export async function GET(request: Request): Promise<void> {
   };
   jar.set(MICROSOFT_STATE_COOKIE, state, options);
   jar.set(MICROSOFT_LINK_COOKIE, linkAsMailbox ? "1" : "0", options);
+  jar.set(MICROSOFT_INTENT_COOKIE, intent, options);
 
   const auth = new URL(
     "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
@@ -41,8 +51,13 @@ export async function GET(request: Request): Promise<void> {
   auth.searchParams.set("redirect_uri", microsoftCallbackUrl(origin));
   auth.searchParams.set("response_type", "code");
   auth.searchParams.set("response_mode", "query");
-  auth.searchParams.set("scope", "openid email");
+  auth.searchParams.set(
+    "scope",
+    linkAsMailbox
+      ? "openid email offline_access https://graph.microsoft.com/Mail.Read"
+      : "openid email",
+  );
   auth.searchParams.set("state", state);
-  auth.searchParams.set("prompt", "select_account");
+  auth.searchParams.set("prompt", linkAsMailbox ? "consent" : "select_account");
   redirect(auth.toString());
 }

@@ -2,6 +2,13 @@ import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
+  beginSync,
+  connectMailbox,
+  startSync,
+} from "../../../../lodge/store.ts";
+import { requireUser } from "../../../../identity/session.ts";
+import {
+  GOOGLE_INTENT_COOKIE,
   GOOGLE_LINK_COOKIE,
   GOOGLE_STATE_COOKIE,
   exchangeAuthorizationCode,
@@ -21,8 +28,10 @@ export async function GET(request: Request): Promise<void> {
   const jar = await cookies();
   const stored = jar.get(GOOGLE_STATE_COOKIE)?.value;
   const link = jar.get(GOOGLE_LINK_COOKIE)?.value === "1";
+  const connect = jar.get(GOOGLE_INTENT_COOKIE)?.value === "connect";
   jar.delete(GOOGLE_STATE_COOKIE);
   jar.delete(GOOGLE_LINK_COOKIE);
+  jar.delete(GOOGLE_INTENT_COOKIE);
 
   const state = url.searchParams.get("state");
   const code = url.searchParams.get("code");
@@ -41,19 +50,39 @@ export async function GET(request: Request): Promise<void> {
     forwardedHost: request.headers.get("x-forwarded-host"),
     forwardedProto: request.headers.get("x-forwarded-proto"),
   });
+  let destination = "/applications";
   try {
     const profile = await exchangeAuthorizationCode({
       provider: "google",
       code,
       redirectUri: googleCallbackUrl(origin),
+      readMail: link,
     });
-    await signInWithProvider({
-      provider: "google",
-      email: profile.email,
-      linkAsMailbox: link,
-    });
+    if (connect) {
+      const user = await requireUser();
+      if (!profile.refreshToken) {
+        destination = "/mailboxes?notice=unread";
+      } else {
+        const mailboxId = await connectMailbox({
+          accountId: user.id,
+          address: profile.email,
+          provider: "gmail",
+          refreshToken: profile.refreshToken,
+        });
+        const runId = await beginSync(mailboxId);
+        if (runId) startSync(runId);
+        destination = "/mailboxes";
+      }
+    } else {
+      await signInWithProvider({
+        provider: "google",
+        email: profile.email,
+        linkAsMailbox: link,
+        refreshToken: profile.refreshToken,
+      });
+    }
   } catch {
-    redirect("/sign-in?google=failed");
+    redirect(connect ? "/mailboxes?notice=unread" : "/sign-in?google=failed");
   }
-  redirect("/sign-in");
+  redirect(destination);
 }

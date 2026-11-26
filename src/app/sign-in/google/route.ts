@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { currentUser } from "../../../identity/session.ts";
 import {
+  GOOGLE_INTENT_COOKIE,
   GOOGLE_LINK_COOKIE,
   GOOGLE_STATE_COOKIE,
   googleCallbackUrl,
@@ -20,8 +22,15 @@ export async function GET(request: Request): Promise<void> {
     forwardedHost: request.headers.get("x-forwarded-host"),
     forwardedProto: request.headers.get("x-forwarded-proto"),
   });
+  const params = new URL(request.url).searchParams;
+  const intent = params.get("intent") === "connect" ? "connect" : "signin";
   const linkAsMailbox =
-    new URL(request.url).searchParams.get("linkAsMailbox") === "true";
+    intent === "connect" || params.get("linkAsMailbox") === "true";
+  if (intent === "connect") {
+    const user = await currentUser();
+    if (!user) redirect("/sign-in");
+    if (!user.emailVerified) redirect("/mailboxes");
+  }
   const state = randomBytes(32).toString("base64url");
   const jar = await cookies();
   const options = {
@@ -33,13 +42,24 @@ export async function GET(request: Request): Promise<void> {
   };
   jar.set(GOOGLE_STATE_COOKIE, state, options);
   jar.set(GOOGLE_LINK_COOKIE, linkAsMailbox ? "1" : "0", options);
+  jar.set(GOOGLE_INTENT_COOKIE, intent, options);
 
   const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   auth.searchParams.set("client_id", clientId);
   auth.searchParams.set("redirect_uri", googleCallbackUrl(origin));
   auth.searchParams.set("response_type", "code");
-  auth.searchParams.set("scope", "openid email");
+  auth.searchParams.set(
+    "scope",
+    linkAsMailbox
+      ? "openid email https://www.googleapis.com/auth/gmail.readonly"
+      : "openid email",
+  );
   auth.searchParams.set("state", state);
-  auth.searchParams.set("prompt", "select_account");
+  if (linkAsMailbox) {
+    auth.searchParams.set("access_type", "offline");
+    auth.searchParams.set("prompt", "consent");
+  } else {
+    auth.searchParams.set("prompt", "select_account");
+  }
   redirect(auth.toString());
 }

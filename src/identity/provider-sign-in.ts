@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { beginSync, connectMailbox, startSync } from "../lodge/store.ts";
 import { query } from "./db.ts";
 import { IdentityError } from "./errors.ts";
 import { writeSessionCookie } from "./session.ts";
@@ -6,8 +7,10 @@ import type { LoginProvider, ProviderSignInResult } from "./types.ts";
 
 export const GOOGLE_STATE_COOKIE = "google_oauth";
 export const GOOGLE_LINK_COOKIE = "google_link";
+export const GOOGLE_INTENT_COOKIE = "google_intent";
 export const MICROSOFT_STATE_COOKIE = "microsoft_oauth";
 export const MICROSOFT_LINK_COOKIE = "microsoft_link";
+export const MICROSOFT_INTENT_COOKIE = "microsoft_intent";
 
 // shortcut: the account key is the normalized email. Store Google's sub when an email can move to another person.
 
@@ -56,6 +59,7 @@ export async function signInWithProvider(input: {
   provider: "google" | "microsoft";
   email: string;
   linkAsMailbox: boolean;
+  refreshToken?: string | null;
 }): Promise<ProviderSignInResult> {
   const email = normalizeEmail(input.email);
   if (email.length === 0) {
@@ -77,12 +81,21 @@ export async function signInWithProvider(input: {
     [sessionId, row.id],
   );
   await writeSessionCookie(sessionId);
+  if (input.linkAsMailbox && input.refreshToken) {
+    const mailboxId = await connectMailbox({
+      accountId: row.id,
+      address: email,
+      provider: input.provider === "google" ? "gmail" : "outlook",
+      refreshToken: input.refreshToken,
+    });
+    const runId = await beginSync(mailboxId);
+    if (runId) startSync(runId);
+  }
   return {
     id: row.id,
     email: row.email,
     emailVerified: row.email_verified,
     loginProvider: loginProvider(row.login_provider),
-    // shortcut: linkAsMailbox is only returned. Mailboxes reads it when that module connects an inbox.
     linkAsMailbox: input.linkAsMailbox,
   };
 }
@@ -91,8 +104,11 @@ export async function exchangeAuthorizationCode(input: {
   provider: "google" | "microsoft";
   code: string;
   redirectUri: string;
-}): Promise<{ email: string }> {
-  if (input.provider === "microsoft") return exchangeMicrosoft(input);
+  readMail?: boolean;
+}): Promise<{ email: string; refreshToken: string | null }> {
+  if (input.provider === "microsoft") {
+    return exchangeMicrosoft({ ...input, readMail: input.readMail });
+  }
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
@@ -111,7 +127,10 @@ export async function exchangeAuthorizationCode(input: {
     }),
   });
   if (!tokenResponse.ok) throw new Error("Google token exchange failed");
-  const token = (await tokenResponse.json()) as { access_token?: string };
+  const token = (await tokenResponse.json()) as {
+    access_token?: string;
+    refresh_token?: unknown;
+  };
   if (!token.access_token) throw new Error("Google token exchange failed");
 
   const profileResponse = await fetch(
@@ -125,7 +144,11 @@ export async function exchangeAuthorizationCode(input: {
   if (typeof profile.email !== "string" || profile.email.trim() === "") {
     throw new Error("Google did not return an email");
   }
-  return { email: profile.email };
+  return {
+    email: profile.email,
+    refreshToken:
+      typeof token.refresh_token === "string" ? token.refresh_token : null,
+  };
 }
 
 function emailFromIdToken(idToken: string): string {
@@ -151,7 +174,8 @@ function emailFromIdToken(idToken: string): string {
 async function exchangeMicrosoft(input: {
   code: string;
   redirectUri: string;
-}): Promise<{ email: string }> {
+  readMail?: boolean;
+}): Promise<{ email: string; refreshToken: string | null }> {
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
@@ -169,13 +193,22 @@ async function exchangeMicrosoft(input: {
         client_secret: clientSecret,
         redirect_uri: input.redirectUri,
         grant_type: "authorization_code",
-        scope: "openid email",
+        scope: input.readMail
+          ? "openid email offline_access https://graph.microsoft.com/Mail.Read"
+          : "openid email",
       }),
     },
   );
   if (!tokenResponse.ok) throw new Error("Microsoft token exchange failed");
-  const token = (await tokenResponse.json()) as { id_token?: unknown };
+  const token = (await tokenResponse.json()) as {
+    id_token?: unknown;
+    refresh_token?: unknown;
+  };
   if (typeof token.id_token !== "string")
     throw new Error("Microsoft token exchange failed");
-  return { email: emailFromIdToken(token.id_token) };
+  return {
+    email: emailFromIdToken(token.id_token),
+    refreshToken:
+      typeof token.refresh_token === "string" ? token.refresh_token : null,
+  };
 }
